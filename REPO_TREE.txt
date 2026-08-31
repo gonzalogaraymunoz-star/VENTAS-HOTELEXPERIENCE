@@ -1,0 +1,26 @@
+.env.example
+.gitignore
+ARCHITECTURE.md
+DEPLOY.md
+README.md
+REPO_TREE.txt
+index.html
+package.json
+src/App.tsx
+src/components/LoginScreen.tsx
+src/components/SalesApp.tsx
+src/lib/money.ts
+src/lib/sales.ts
+src/lib/supabase.ts
+src/main.tsx
+src/styles.css
+src/types.ts
+src/vite-env.d.ts
+supabase/VERIFY.sql
+supabase/migrations/20260830203000_link_sales_codes_and_rpc.sql
+tsconfig.json
+vercel.json
+vite.config.ts
+
+---
+Files: 23
