@@ -28,6 +28,7 @@ export type Product = {
   duration_hours?: number | null;
   schedule?: string | null;
   description?: string | null;
+  product_slug?: string | null;
   price_mode: string;
   prices: Record<string, number | boolean | string | null>;
   tax_treatment?: 'manual' | 'taxable' | 'exempt' | string | null;
