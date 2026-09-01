@@ -6,25 +6,54 @@ import type {
   PassengerDraft,
   PaymentMovement,
   Product,
+  SellerProfile,
   ServiceDraft,
   Supplier,
 } from '../types';
 import { economics } from './money';
 
 export async function loadReferenceData() {
-  const [hotelsRes, productsRes, suppliersRes] = await Promise.all([
+  const [hotelsRes, productsRes, suppliersRes, sellersRes] = await Promise.all([
     supabase.from('hotel_partners').select('*').eq('active', true).order('name'),
     supabase.from('product_catalog').select('*').eq('active', true).order('category').order('name'),
     supabase.from('suppliers').select('id,name,supplier_type,active').eq('active', true).order('name'),
+    supabase.rpc('list_link_sellers'),
   ]);
   if (hotelsRes.error) throw hotelsRes.error;
   if (productsRes.error) throw productsRes.error;
   if (suppliersRes.error) throw suppliersRes.error;
+  if (sellersRes.error) throw sellersRes.error;
   return {
     hotels: (hotelsRes.data || []) as HotelPartner[],
     products: (productsRes.data || []) as Product[],
     suppliers: (suppliersRes.data || []) as Supplier[],
+    sellers: (sellersRes.data || []) as SellerProfile[],
   };
+}
+
+export async function requestPartner(input: {
+  sellerProfileId: string;
+  name: string;
+  partnerType: string;
+  leadPrefix: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  notes: string;
+}) {
+  const payload = {
+    seller_profile_id: input.sellerProfileId,
+    name: input.name,
+    partner_type: input.partnerType || 'hotel',
+    lead_prefix: input.leadPrefix,
+    contact_name: input.contactName || null,
+    email: input.email || null,
+    phone: input.phone || null,
+    notes: input.notes || null,
+  };
+  const { data, error } = await supabase.rpc('request_partner', { p_payload: payload });
+  if (error) throw error;
+  return data as { id: string; status: string; name: string; lead_prefix: string };
 }
 
 export async function loadLeads(limit = 250) {
@@ -64,7 +93,7 @@ export type CreateSaleInput = {
   checkin?: string;
   checkout?: string;
   contact: string;
-  sellerName: string;
+  sellerProfileId: string;
   passengers: PassengerDraft[];
   services: ServiceDraft[];
   notes?: string;
@@ -73,6 +102,7 @@ export type CreateSaleInput = {
 export async function createSale(input: CreateSaleInput, confirmNow = false) {
   const hotel = input.hotelPartnerId;
   if (!hotel) throw new Error('Selecciona hotel/origen.');
+  if (!input.sellerProfileId) throw new Error('Selecciona un vendedor registrado.');
   if (!input.passengers.length || !input.passengers[0].full_name.trim()) throw new Error('Falta el cliente principal.');
   if (!input.services.length) throw new Error('Agrega al menos un producto.');
 
@@ -118,7 +148,7 @@ export async function createSale(input: CreateSaleInput, confirmNow = false) {
     checkin: input.checkin || null,
     checkout: input.checkout || null,
     contact: input.contact || null,
-    seller_name: input.sellerName || null,
+    seller_profile_id: input.sellerProfileId,
     notes: input.notes || null,
     passengers: input.passengers,
     services,
