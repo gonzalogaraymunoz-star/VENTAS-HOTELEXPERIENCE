@@ -30,6 +30,8 @@ export type Product = {
   description?: string | null;
   price_mode: string;
   prices: Record<string, number | boolean | string | null>;
+  tax_treatment?: 'manual' | 'taxable' | 'exempt' | string | null;
+  tax_rate?: number | null;
   active: boolean;
 };
 
@@ -54,7 +56,9 @@ export type Lead = {
   prioridad?: string | null;
   estado: string;
   canal?: string | null;
+  propuesta_enviada?: string | null;
   created_at: string;
+  updated_at?: string | null;
   created_by?: string | null;
   assigned_to?: string | null;
   hotel_partner_id?: string | null;
@@ -68,6 +72,8 @@ export type LeadService = {
   id: string;
   lead_id: string;
   service_code?: string | null;
+  product_catalog_id?: string | null;
+  proposed_supplier_id?: string | null;
   producto: string;
   fecha_servicio?: string | null;
   numero_pax?: number | null;
@@ -84,11 +90,15 @@ export type LeadService = {
   estado_pago: string;
   estado_operacion: string;
   booking_status?: string | null;
+  pricing_status?: string | null;
   sales_channel?: string | null;
   seller_name?: string | null;
   modality?: string | null;
   tour_id?: string | null;
   hora_inicio?: string | null;
+  operation_ready_at?: string | null;
+  tax_treatment_snapshot?: string | null;
+  tax_rate_snapshot?: number | null;
   created_at: string;
   leads?: { codigo?: string | null; reserva?: string | null } | null;
 };
