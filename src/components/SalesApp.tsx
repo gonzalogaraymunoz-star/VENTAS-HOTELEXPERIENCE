@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRight, Banknote, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus,
+  ArrowRight, Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus,
   RefreshCw, Search, ShoppingBag, Users, X, Kanban, CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -8,8 +8,9 @@ import { confirmSale, createSale, loadLeads, loadPayments, loadReferenceData, lo
 import { clp, economics, resolveProductPrice } from '../lib/money';
 import type { HotelPartner, Lead, LeadService, PassengerDraft, PaymentMovement, Product, Profile, ServiceDraft, Supplier } from '../types';
 import { AccountWorkspace, ActionDashboard, ProductWorkspace } from './SalesWorkspaces';
+import VisualCatalog from './VisualCatalog';
 
-type Screen = 'dashboard' | 'new-sale' | 'leads' | 'pipeline' | 'products' | 'payments';
+type Screen = 'dashboard' | 'new-sale' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
 
 type AppData = {
   hotels: HotelPartner[];
@@ -50,6 +51,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
   const nav: { id: Screen; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'new-sale', label: 'Cotizar / vender', icon: ShoppingBag },
+    { id: 'catalog', label: 'Catálogo', icon: BookOpen },
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
     { id: 'products', label: 'Productos', icon: Boxes },
@@ -107,6 +109,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
             operationsUrl={operationsUrl}
           />}
           {screen==='new-sale' && <NewSale data={data} profile={profile} initialProductId={quoteProductId} onCreated={async()=>{await refresh();go('leads')}}/>}
+          {screen==='catalog' && <VisualCatalog products={data.products} onQuote={productId=>startQuote(productId)}/>} 
           {screen==='leads' && <LeadTable leads={data.leads} services={data.services} onConfirm={async(id)=>{await confirmSale(id);await refresh();}}/>}
           {screen==='pipeline' && <Pipeline leads={data.leads} onChange={async(id,status)=>{await updateLeadStatus(id,status);await refresh();}}/>}
           {screen==='products' && <ProductWorkspace products={data.products} onQuote={productId=>startQuote(productId)}/>} 
@@ -118,7 +121,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
 }
 
 function titleFor(screen: Screen) {
-  return ({ dashboard:'Centro de trabajo', 'new-sale':'Cotización / venta', leads:'Clientes y ventas', pipeline:'Pipeline comercial', products:'Catálogo comercial', payments:'Cuentas y pagos' } as Record<Screen,string>)[screen];
+  return ({ dashboard:'Centro de trabajo', 'new-sale':'Cotización / venta', catalog:'Catálogo visual', leads:'Clientes y ventas', pipeline:'Pipeline comercial', products:'Productos y tarifas', payments:'Cuentas y pagos' } as Record<Screen,string>)[screen];
 }
 
 function Empty({text}:{text:string}) { return <div className="empty-state">{text}</div>; }
