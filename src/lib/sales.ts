@@ -70,7 +70,7 @@ export type CreateSaleInput = {
   notes?: string;
 };
 
-export async function createSale(input: CreateSaleInput) {
+export async function createSale(input: CreateSaleInput, confirmNow = false) {
   const hotel = input.hotelPartnerId;
   if (!hotel) throw new Error('Selecciona hotel/origen.');
   if (!input.passengers.length || !input.passengers[0].full_name.trim()) throw new Error('Falta el cliente principal.');
@@ -84,6 +84,9 @@ export async function createSale(input: CreateSaleInput) {
       Number(service.hotel_commission_pct),
       Number(service.seller_commission_pct),
     );
+    if (confirmNow && calc.total <= 0) {
+      throw new Error(`El producto ${service.product_name} no tiene precio de venta definido. Guárdalo como cotización o define la tarifa antes de confirmar.`);
+    }
     return {
       product_id: service.product_id || null,
       product_code: service.product_code || null,
@@ -119,18 +122,41 @@ export async function createSale(input: CreateSaleInput) {
     notes: input.notes || null,
     passengers: input.passengers,
     services,
+    confirm_now: confirmNow,
   };
 
   const { data, error } = await supabase.rpc('create_link_sale', { p_payload: payload });
   if (error) throw error;
-  return data as { lead_id: string; lead_code: string; reservation_code: string };
+  return data as { lead_id: string; lead_code: string; reservation_code: string; status: 'quoted' | 'confirmed' };
 }
 
+export async function confirmSale(leadId: string) {
+  const { data, error } = await supabase.rpc('confirm_link_sale', { p_lead_id: leadId });
+  if (error) throw error;
+  return data as { lead_id: string; lead_code: string; confirmed_services?: number; already_confirmed?: boolean };
+}
+
+const statusMeta: Record<string, { commercial: string; next: string }> = {
+  nuevo: { commercial: 'new', next: 'Contactar cliente' },
+  contactado: { commercial: 'contacted', next: 'Detectar interés y necesidad' },
+  interesado: { commercial: 'interested', next: 'Preparar cotización' },
+  cotizando: { commercial: 'quoting', next: 'Completar cotización' },
+  propuesta: { commercial: 'proposal_sent', next: 'Esperar respuesta' },
+  esperando: { commercial: 'waiting', next: 'Hacer seguimiento' },
+  perdido: { commercial: 'lost', next: 'Cerrar oportunidad perdida' },
+  cancelado: { commercial: 'cancelled', next: 'Revisar devolución o cierre' },
+  dormido: { commercial: 'dormant', next: 'Reactivar cuando corresponda' },
+};
+
 export async function updateLeadStatus(leadId: string, status: string) {
-  const commercial = status === 'confirmado' ? 'won' : status === 'perdido' ? 'lost' : status;
+  if (status === 'confirmado') {
+    await confirmSale(leadId);
+    return;
+  }
+  const meta = statusMeta[status] || { commercial: status, next: 'Definir próxima acción' };
   const { error } = await supabase
     .from('leads')
-    .update({ estado: status, commercial_status: commercial })
+    .update({ estado: status, commercial_status: meta.commercial, next_best_action: meta.next })
     .eq('id', leadId);
   if (error) throw error;
 }
