@@ -8,10 +8,40 @@ export type Profile = {
   is_active: boolean;
 };
 
+export type SellerProfile = {
+  id: string;
+  full_name?: string | null;
+  email?: string | null;
+  role: string;
+};
+
+export type PartnerRequest = {
+  id: string;
+  requested_by: string;
+  seller_profile_id: string;
+  name: string;
+  partner_type: string;
+  lead_prefix: string;
+  contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  hotel_partner_id?: string | null;
+  created_at: string;
+};
+
 export type HotelPartner = {
   id: string;
   name: string;
   slug: string;
+  partner_type?: string | null;
+  contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
   lead_prefix?: string | null;
   default_channel?: string | null;
   commission_type?: string | null;
