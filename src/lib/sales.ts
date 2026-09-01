@@ -231,3 +231,45 @@ export async function addPayment(input: {
   await supabase.from('lead_services').update({ estado_pago: state }).eq('id', input.serviceId);
   return data;
 }
+
+export async function registerClientPayment(input: {
+  leadId: string;
+  amount: number;
+  paymentMethod: string;
+  reference: string;
+  counterparty: string;
+}) {
+  if (!input.leadId) throw new Error('Selecciona una venta.');
+  if (!(input.amount > 0)) throw new Error('El monto debe ser mayor que cero.');
+  const { data, error } = await supabase.rpc('register_link_client_payment', {
+    p_lead_id: input.leadId,
+    p_amount: input.amount,
+    p_payment_method: input.paymentMethod || null,
+    p_reference: input.reference || null,
+    p_counterparty: input.counterparty || null,
+  });
+  if (error) throw error;
+  return data as {
+    lead_id: string;
+    amount: number;
+    allocated_services: number;
+    remaining_balance: number;
+  };
+}
+
+export async function recordServiceDocumentIssue(leadId: string, action: 'downloaded' | 'shared') {
+  if (!leadId) return;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('reservation_documents').upsert({
+    lead_id: leadId,
+    document_type: 'sales_service_proforma',
+    title: 'Factura proforma / estado de servicios',
+    url: null,
+    status: action,
+    completed_at: now,
+    created_by: sessionData.session?.user.id || null,
+    updated_at: now,
+  }, { onConflict: 'lead_id,document_type' });
+  if (error) throw error;
+}
