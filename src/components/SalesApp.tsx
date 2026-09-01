@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabase';
 import { confirmSale, createSale, loadLeads, loadPayments, loadReferenceData, loadServices, requestPartner, updateLeadStatus } from '../lib/sales';
 import { clp, economics, resolveProductPrice } from '../lib/money';
 import type { HotelPartner, Lead, LeadService, PassengerDraft, PaymentMovement, Product, Profile, SellerProfile, ServiceDraft, Supplier } from '../types';
-import { AccountWorkspace, ActionDashboard, ProductWorkspace } from './SalesWorkspaces';
+import { ActionDashboard, ProductWorkspace } from './SalesWorkspaces';
+import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import VisualCatalog from './VisualCatalog';
 
 type Screen = 'dashboard' | 'new-sale' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
@@ -56,7 +57,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
     { id: 'products', label: 'Productos', icon: Boxes },
-    { id: 'payments', label: 'Pagos', icon: Banknote },
+    { id: 'payments', label: 'Cobros', icon: Banknote },
   ];
 
   function go(next: Screen) { setScreen(next); setMobileOpen(false); }
@@ -122,7 +123,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
 }
 
 function titleFor(screen: Screen) {
-  return ({ dashboard:'Centro de trabajo', 'new-sale':'Cotización / venta', catalog:'Catálogo visual', leads:'Clientes y ventas', pipeline:'Pipeline comercial', products:'Productos y tarifas', payments:'Cuentas y pagos' } as Record<Screen,string>)[screen];
+  return ({ dashboard:'Centro de trabajo', 'new-sale':'Cotización / venta', catalog:'Catálogo visual', leads:'Clientes y ventas', pipeline:'Pipeline comercial', products:'Productos y tarifas', payments:'Cobros y documentos' } as Record<Screen,string>)[screen];
 }
 
 function Empty({text}:{text:string}) { return <div className="empty-state">{text}</div>; }
