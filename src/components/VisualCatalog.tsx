@@ -13,6 +13,13 @@ type CatalogFamily = {
   products: Product[];
 };
 
+const TOURISM_CATEGORIES = new Set([
+  'Nocturno',
+  'Tour día completo',
+  'Tour medio día',
+  'Transporte',
+]);
+
 function imagePaths(product: Product) {
   const slug = product.product_slug || product.code.replace(/_(regular|private|hotel|lowcost).*$/i, '');
   const category = String(product.category || '').toLowerCase();
@@ -79,6 +86,7 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
   const families = useMemo<CatalogFamily[]>(() => {
     const map = new Map<string, CatalogFamily>();
     products.forEach(product => {
+      if (!TOURISM_CATEGORIES.has(product.category)) return;
       const slug = product.product_slug || product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
       const current = map.get(slug) || {
         slug,
@@ -94,6 +102,7 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
     return Array.from(map.values()).sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
   }, [products]);
 
+  const visibleProductsCount = useMemo(()=>families.reduce((total, family)=>total + family.products.length, 0), [families]);
   const categories = useMemo(()=>['Todos', ...Array.from(new Set(families.map(item=>item.category)))], [families]);
   const filtered = useMemo(()=>families.filter(item => {
     const text = `${item.name} ${item.category} ${item.description} ${item.products.map(p=>p.code).join(' ')}`.toLowerCase();
@@ -105,7 +114,7 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
   return <div className="visual-catalog">
     <section className="visual-catalog-hero">
       <div><p className="eyebrow">CATÁLOGO VISUAL</p><h1>Experiencias que se pueden mostrar y vender.</h1><p>Las imágenes vienen del mismo <b>catalog-images</b> de HOTEL EXPERIENCE. Producto, modalidad y precio siguen naciendo de Supabase.</p></div>
-      <div className="visual-catalog-count"><span>Experiencias</span><strong>{families.length}</strong><small>{products.length} tarifas / modalidades activas</small></div>
+      <div className="visual-catalog-count"><span>Experiencias</span><strong>{families.length}</strong><small>{visibleProductsCount} tarifas / modalidades activas</small></div>
     </section>
 
     <section className="visual-catalog-toolbar">
