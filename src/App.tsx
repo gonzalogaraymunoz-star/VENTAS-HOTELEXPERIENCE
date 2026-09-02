@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import type { Profile } from './types';
 import LoginScreen from './components/LoginScreen';
-import SalesApp from './components/SalesApp';
+import SalesAppV2 from './components/SalesAppV2';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -37,5 +37,5 @@ export default function App() {
   if (!session) return <LoginScreen />;
   if (!profile) return <div className="center-screen"><div className="brand-mark">LINK</div><p>Preparando tu espacio comercial…</p></div>;
   if (profile.is_active === false) return <div className="center-screen"><h1>Cuenta desactivada</h1><button className="button dark" onClick={() => supabase.auth.signOut()}>Cerrar sesión</button></div>;
-  return <SalesApp profile={profile} />;
+  return <SalesAppV2 profile={profile} />;
 }
