@@ -3,9 +3,8 @@ import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu,
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
 import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, Supplier } from '../types';
-import ManualQuoteBuilder from './ManualQuoteBuilder';
 import VisualCatalog from './VisualCatalog';
-import ReservationIntakeForm from './ReservationIntakeForm';
+import SalesFlowForm from './SalesFlowForm';
 import { ProductWorkspace } from './SalesWorkspaces';
 import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
@@ -50,7 +49,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 
   const nav: { id: Screen; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
-    { id: 'new-sale', label: 'Ingreso / venta', icon: ShoppingBag },
+    { id: 'new-sale', label: 'Cotización e ingreso', icon: ShoppingBag },
     { id: 'catalog', label: 'Catálogo', icon: BookOpen },
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
@@ -82,18 +81,18 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
       <header className="topbar">
         <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
         <div><p className="eyebrow">LINK VENTAS</p><strong>{titleFor(screen)}</strong></div>
-        <div className="top-actions"><button className="button ghost" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? 'spin' : ''}/><span>Actualizar</span></button><button className="button dark" onClick={() => newIntake()}><Plus size={16}/> Nuevo ingreso</button></div>
+        <div className="top-actions"><button className="button ghost" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? 'spin' : ''}/><span>Actualizar</span></button><button className="button dark" onClick={() => newIntake()}><Plus size={16}/> Nueva cotización</button></div>
       </header>
 
       <section className="content-area">
         {error && <div className="error-box page-error">{error}</div>}
         {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
-          {screen === 'dashboard' && <div className="screen-stack"><ManualQuoteBuilder compact/><ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/></div>}
-          {screen === 'new-sale' && <ReservationIntakeForm profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} onSaved={refresh} onConfirmed={async () => { await refresh(); setEditLeadId(''); setInitialProductId(''); go('leads'); }}/>} 
+          {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
+          {screen === 'new-sale' && <SalesFlowForm profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId(''); go('leads'); }}/>} 
           {screen === 'catalog' && <VisualCatalog products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
-          {screen === 'products' && <div className="screen-stack"><ManualQuoteBuilder/><ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/></div>} 
+          {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} onAdded={refresh}/>} 
         </>}
       </section>
@@ -104,7 +103,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 function titleFor(screen: Screen) {
   return ({
     dashboard: 'Centro de trabajo',
-    'new-sale': 'Ingreso de información',
+    'new-sale': 'Cotización e ingreso',
     catalog: 'Catálogo visual',
     leads: 'Clientes y reservas',
     pipeline: 'Pipeline comercial',
