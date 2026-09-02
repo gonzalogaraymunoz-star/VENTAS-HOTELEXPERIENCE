@@ -14,6 +14,7 @@ import { ActionDashboard, ProductWorkspace } from './SalesWorkspaces';
 import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import VisualCatalog from './VisualCatalog';
 import ManualQuoteBuilder from './ManualQuoteBuilder';
+import ClientIntakeEditor from './ClientIntakeEditor';
 
 type Screen = 'dashboard' | 'new-sale' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
 
@@ -119,7 +120,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
           </div>}
           {screen==='new-sale' && <NewSale data={data} profile={profile} initialProductId={quoteProductId} onCreated={async()=>{await refresh();go('leads')}}/>}
           {screen==='catalog' && <VisualCatalog products={data.products} onQuote={productId=>startQuote(productId)}/>} 
-          {screen==='leads' && <LeadTable leads={data.leads} services={data.services} onConfirm={async(id)=>{await confirmSale(id);await refresh();}}/>}
+          {screen==='leads' && <LeadTable leads={data.leads} services={data.services} onConfirm={async(id)=>{await confirmSale(id);await refresh();}} onUpdated={refresh}/>}
           {screen==='pipeline' && <Pipeline leads={data.leads} onChange={async(id,status)=>{await updateLeadStatus(id,status);await refresh();}}/>}
           {screen==='products' && <div className="screen-stack"><ManualQuoteBuilder/><ProductWorkspace products={data.products} onQuote={productId=>startQuote(productId)}/></div>} 
           {screen==='payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} onAdded={refresh}/>} 
@@ -137,17 +138,21 @@ function Empty({text}:{text:string}) { return <div className="empty-state">{text
 function Status({value}:{value:string}) { const key=(value||'').toLowerCase(); return <span className={`status status-${key}`}>{value || 'Pendiente'}</span>; }
 function taxLabel(product: Product){if(product.tax_treatment==='exempt')return 'Exento';if(product.tax_treatment==='taxable')return product.tax_rate!=null?`Afecto ${product.tax_rate}%`:'Afecto · tasa por definir';return 'Tributación por definir'}
 
-function LeadTable({ leads, services, onConfirm }: { leads: Lead[]; services: LeadService[]; onConfirm:(leadId:string)=>Promise<void> }) {
-  const [query,setQuery]=useState(''); const [busy,setBusy]=useState(''); const [message,setMessage]=useState('');
+function LeadTable({ leads, services, onConfirm, onUpdated }: { leads: Lead[]; services: LeadService[]; onConfirm:(leadId:string)=>Promise<void>; onUpdated:()=>Promise<void> }) {
+  const [query,setQuery]=useState('');
+  const [busy,setBusy]=useState('');
+  const [message,setMessage]=useState('');
+  const [editing,setEditing]=useState<Lead|null>(null);
   const rows=useMemo(()=>leads.filter(l=>`${l.codigo} ${l.reserva} ${l.servicio} ${l.contacto} ${l.nationality||''} ${l.hotel_partners?.name}`.toLowerCase().includes(query.toLowerCase())),[leads,query]);
   const servicesFor=(leadId:string)=>services.filter(s=>s.lead_id===leadId);
   const canConfirm=(leadId:string)=>servicesFor(leadId).some(s=>s.booking_status==='quoted');
   async function confirm(id:string){setBusy(id);setMessage('');try{await onConfirm(id);setMessage('Venta confirmada y entregada a Operaciones.')}catch(e:any){setMessage(e?.message||'No se pudo confirmar la venta.')}finally{setBusy('')}}
   return <div className="screen-stack">
-    <section className="page-heading"><div><p className="eyebrow">CRM COMERCIAL</p><h1>Clientes</h1><p className="muted">El mismo código conecta ingreso/venta, pasajeros, productos, pagos y operación.</p></div></section>
+    <section className="page-heading"><div><p className="eyebrow">CRM COMERCIAL</p><h1>Clientes</h1><p className="muted">El mismo código conecta ingreso/venta, pasajeros, productos, pagos y operación. Los datos pendientes se pueden completar cuando lleguen.</p></div></section>
     {message&&<div className={message.startsWith('Venta confirmada')?'success-box':'error-box'}>{message}</div>}
     <div className="toolbar"><div className="search-box"><Search size={17}/><input placeholder="Buscar código, cliente, nacionalidad, producto, hotel…" value={query} onChange={e=>setQuery(e.target.value)}/></div><span>{rows.length} registros</span></div>
-    <div className="table-shell"><table><thead><tr><th>Código</th><th>Origen</th><th>Contacto</th><th>Arribo</th><th>Prioridad</th><th>Productos</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{rows.map(l=><tr key={l.id}><td><strong>{l.codigo}</strong><small>{l.reserva}</small></td><td>{l.hotel_partners?.name || l.canal || '—'}</td><td>{l.contacto || 'Por completar'}<small>{l.nationality || 'Nacionalidad pendiente'}</small></td><td>{l.checkin || 'Por definir'}<small>{l.stay_days!=null?`${l.stay_days} días`:'Estadía pendiente'}</small></td><td><Status value={l.prioridad || 'Sin fecha'}/></td><td>{servicesFor(l.id).length}<small>{l.servicio || 'Sin detalle'}</small></td><td>{clp(l.precio_venta)}</td><td><Status value={l.estado}/></td><td>{canConfirm(l.id)?<button className="button dark" disabled={busy===l.id} onClick={()=>void confirm(l.id)}>{busy===l.id?'Confirmando…':'Confirmar venta'}</button>:<span className="muted">{l.estado==='confirmado'?'En Operaciones':'Completar ingreso'}</span>}</td></tr>)}</tbody></table>{!rows.length&&<Empty text="No hay coincidencias."/>}</div>
+    <div className="table-shell"><table><thead><tr><th>Código</th><th>Origen</th><th>Contacto</th><th>Arribo</th><th>Prioridad</th><th>Productos</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{rows.map(l=><tr key={l.id}><td><strong>{l.codigo}</strong><small>{l.reserva}</small></td><td>{l.hotel_partners?.name || l.canal || '—'}</td><td>{l.contacto || 'Por completar'}<small>{l.nationality || 'Nacionalidad pendiente'}</small></td><td>{l.checkin || 'Por definir'}<small>{l.stay_days!=null?`${l.stay_days} días`:'Estadía pendiente'}</small></td><td><Status value={l.prioridad || 'Sin fecha'}/></td><td>{servicesFor(l.id).length}<small>{l.servicio || 'Sin detalle'}</small></td><td>{clp(l.precio_venta)}</td><td><Status value={l.estado}/></td><td><div className="top-actions"><button className="button ghost" onClick={()=>setEditing(l)}>Datos</button>{canConfirm(l.id)?<button className="button dark" disabled={busy===l.id} onClick={()=>void confirm(l.id)}>{busy===l.id?'Confirmando…':'Confirmar venta'}</button>:<span className="muted">{l.estado==='confirmado'?'En Operaciones':'Ingreso abierto'}</span>}</div></td></tr>)}</tbody></table>{!rows.length&&<Empty text="No hay coincidencias."/>}</div>
+    {editing&&<ClientIntakeEditor lead={editing} onClose={()=>setEditing(null)} onSaved={async()=>{await onUpdated();setEditing(current=>current?leads.find(l=>l.id===current.id)||current:current)}}/>}
   </div>;
 }
 
