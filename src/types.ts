@@ -91,6 +91,19 @@ export type Lead = {
   canal?: string | null;
   propuesta_enviada?: string | null;
   observaciones_cobros?: string | null;
+  reservation_reference?: string | null;
+  sales_stage?: string | null;
+  quote_sent_at?: string | null;
+  quote_accepted_at?: string | null;
+  payment_link?: string | null;
+  payment_link_sent_at?: string | null;
+  arrival_flight_number?: string | null;
+  departure_flight_number?: string | null;
+  pickup_location?: string | null;
+  hotel_room?: string | null;
+  itinerary_sent_at?: string | null;
+  itinerary_sent_via?: string | null;
+  reservation_completed_at?: string | null;
   created_at: string;
   updated_at?: string | null;
   created_by?: string | null;
@@ -147,6 +160,7 @@ export type PassengerDraft = {
   document_number: string;
   birth_date: string;
   dietary_restrictions: string;
+  medical_notes: string;
   is_primary: boolean;
 };
 
@@ -182,4 +196,19 @@ export type PaymentMovement = {
   counterparty_name?: string | null;
   category?: string | null;
   lead_services?: { producto?: string | null; service_code?: string | null; leads?: { codigo?: string | null } | null } | null;
+};
+
+export type SalesQuoteSnapshot = {
+  id: string;
+  quote_code: string;
+  version: number;
+  status: 'draft' | 'sent' | 'accepted' | string;
+  snapshot: {
+    lead?: Record<string, unknown>;
+    items?: Array<Record<string, unknown>>;
+    policy?: Record<string, unknown> | null;
+  };
+  policy_summary?: string | null;
+  total: number;
+  currency: string;
 };
