@@ -160,7 +160,7 @@ export type PassengerDraft = {
   document_number: string;
   birth_date: string;
   dietary_restrictions: string;
-  medical_notes: string;
+  medical_notes?: string;
   is_primary: boolean;
 };
 
