@@ -90,6 +90,7 @@ export type Lead = {
   estado: string;
   canal?: string | null;
   propuesta_enviada?: string | null;
+  observaciones_cobros?: string | null;
   created_at: string;
   updated_at?: string | null;
   created_by?: string | null;
@@ -108,6 +109,7 @@ export type LeadService = {
   product_catalog_id?: string | null;
   proposed_supplier_id?: string | null;
   producto: string;
+  service_type?: string | null;
   fecha_servicio?: string | null;
   numero_pax?: number | null;
   observacion?: string | null;
