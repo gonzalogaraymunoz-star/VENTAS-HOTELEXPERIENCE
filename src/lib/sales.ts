@@ -12,6 +12,27 @@ import type {
 } from '../types';
 import { economics } from './money';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function arrivalPriority(checkin?: string | null) {
+  if (!checkin) return 'Sin fecha';
+  const arrival = new Date(`${checkin}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days = Math.ceil((arrival.getTime() - today.getTime()) / DAY_MS);
+  if (days <= 3) return 'Alta';
+  if (days <= 14) return 'Media';
+  return 'Baja';
+}
+
+export function stayLength(checkin?: string | null, checkout?: string | null) {
+  if (!checkin || !checkout) return null;
+  const start = new Date(`${checkin}T12:00:00`);
+  const end = new Date(`${checkout}T12:00:00`);
+  const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
+  return days >= 0 ? days : null;
+}
+
 export async function loadReferenceData() {
   const [hotelsRes, productsRes, suppliersRes, sellersRes] = await Promise.all([
     supabase.from('hotel_partners').select('*').eq('active', true).order('name'),
@@ -63,7 +84,11 @@ export async function loadLeads(limit = 250) {
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data || []) as Lead[];
+  return ((data || []) as Lead[]).map(lead => ({
+    ...lead,
+    prioridad: arrivalPriority(lead.checkin),
+    stay_days: lead.stay_days ?? stayLength(lead.checkin, lead.checkout),
+  }));
 }
 
 export async function loadServices(limit = 400) {
@@ -93,6 +118,8 @@ export type CreateSaleInput = {
   checkin?: string;
   checkout?: string;
   contact: string;
+  nationality?: string;
+  stayDays?: number | null;
   sellerProfileId: string;
   passengers: PassengerDraft[];
   services: ServiceDraft[];
@@ -103,10 +130,19 @@ export async function createSale(input: CreateSaleInput, confirmNow = false) {
   const hotel = input.hotelPartnerId;
   if (!hotel) throw new Error('Selecciona hotel/origen.');
   if (!input.sellerProfileId) throw new Error('Selecciona un vendedor registrado.');
-  if (!input.passengers.length || !input.passengers[0].full_name.trim()) throw new Error('Falta el cliente principal.');
-  if (!input.services.length) throw new Error('Agrega al menos un producto.');
+
+  const primary = input.passengers[0];
+  const hasIdentity = Boolean(
+    input.contact.trim() ||
+    primary?.full_name?.trim() ||
+    primary?.email?.trim() ||
+    primary?.phone?.trim()
+  );
+  if (!hasIdentity) throw new Error('Para crear el ingreso necesitamos al menos nombre, teléfono o email del cliente. El resto puede completarse después.');
+  if (confirmNow && !input.services.length) throw new Error('Agrega al menos un producto antes de confirmar la venta.');
 
   const services = input.services.map((service) => {
+    if (!service.product_name.trim()) throw new Error('Cada ítem debe tener un nombre.');
     const calc = economics(
       Number(service.unit_price),
       Number(service.pax),
@@ -115,7 +151,7 @@ export async function createSale(input: CreateSaleInput, confirmNow = false) {
       Number(service.seller_commission_pct),
     );
     if (confirmNow && calc.total <= 0) {
-      throw new Error(`El producto ${service.product_name} no tiene precio de venta definido. Guárdalo como cotización o define la tarifa antes de confirmar.`);
+      throw new Error(`El producto ${service.product_name} no tiene precio de venta definido. Guarda el ingreso o define la tarifa antes de confirmar.`);
     }
     return {
       product_id: service.product_id || null,
@@ -124,9 +160,9 @@ export async function createSale(input: CreateSaleInput, confirmNow = false) {
       category: service.category || null,
       date: service.date || null,
       start_time: service.start_time || null,
-      pax: service.pax,
+      pax: Math.max(1, Number(service.pax || 1)),
       modality: service.modality || null,
-      unit_price: service.unit_price,
+      unit_price: Number(service.unit_price || 0),
       total_price: calc.total,
       operator_cost: calc.cost,
       margin: calc.margin,
@@ -141,16 +177,26 @@ export async function createSale(input: CreateSaleInput, confirmNow = false) {
     };
   });
 
+  const passengers = input.passengers.length ? input.passengers.map((passenger, index) => ({
+    ...passenger,
+    nationality: passenger.nationality || (index === 0 ? input.nationality || '' : ''),
+  })) : [{
+    full_name: '', email: '', phone: '', nationality: input.nationality || '', document_type: 'Pasaporte',
+    document_number: '', birth_date: '', dietary_restrictions: '', is_primary: true,
+  }];
+
   const payload = {
     hotel_partner_id: hotel,
     channel: input.channel || 'Venta directa',
-    priority: input.priority || 'Media',
+    priority: input.priority === 'Sin fecha' ? 'Media' : input.priority || 'Media',
     checkin: input.checkin || null,
     checkout: input.checkout || null,
     contact: input.contact || null,
+    nationality: input.nationality || primary?.nationality || null,
+    stay_days: input.stayDays ?? stayLength(input.checkin, input.checkout),
     seller_profile_id: input.sellerProfileId,
     notes: input.notes || null,
-    passengers: input.passengers,
+    passengers,
     services,
     confirm_now: confirmNow,
   };
@@ -169,8 +215,8 @@ export async function confirmSale(leadId: string) {
 const statusMeta: Record<string, { commercial: string; next: string }> = {
   nuevo: { commercial: 'new', next: 'Contactar cliente' },
   contactado: { commercial: 'contacted', next: 'Detectar interés y necesidad' },
-  interesado: { commercial: 'interested', next: 'Preparar cotización' },
-  cotizando: { commercial: 'quoting', next: 'Completar cotización' },
+  interesado: { commercial: 'interested', next: 'Preparar propuesta' },
+  cotizando: { commercial: 'quoting', next: 'Completar ingreso / venta' },
   propuesta: { commercial: 'proposal_sent', next: 'Esperar respuesta' },
   esperando: { commercial: 'waiting', next: 'Hacer seguimiento' },
   perdido: { commercial: 'lost', next: 'Cerrar oportunidad perdida' },
