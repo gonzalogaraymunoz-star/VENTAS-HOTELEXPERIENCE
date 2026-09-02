@@ -91,6 +91,44 @@ export async function loadLeads(limit = 250) {
   }));
 }
 
+export async function loadLeadPassengers(leadId: string) {
+  const { data, error } = await supabase
+    .from('passengers')
+    .select('id,lead_id,passenger_code,full_name,email,phone,nationality,document_type,document_number,birth_date,dietary_restrictions,is_primary')
+    .eq('lead_id', leadId)
+    .order('passenger_code', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updateLeadIntake(input: {
+  leadId: string;
+  contact: string;
+  checkin: string;
+  checkout: string;
+  nationality: string;
+  stayDays: number | null;
+  priority: string;
+  passengers: Array<PassengerDraft & { passenger_code?: string }>;
+}) {
+  if (!input.leadId) throw new Error('Falta el ingreso a actualizar.');
+  const payload = {
+    contact: input.contact || null,
+    checkin: input.checkin || null,
+    checkout: input.checkout || null,
+    nationality: input.nationality || null,
+    stay_days: input.stayDays,
+    priority: input.priority === 'Sin fecha' ? 'Media' : input.priority,
+    passengers: input.passengers,
+  };
+  const { data, error } = await supabase.rpc('update_link_sale_intake', {
+    p_lead_id: input.leadId,
+    p_payload: payload,
+  });
+  if (error) throw error;
+  return data as { lead_id: string; passengers_updated: number };
+}
+
 export async function loadServices(limit = 400) {
   const { data, error } = await supabase
     .from('lead_services')
