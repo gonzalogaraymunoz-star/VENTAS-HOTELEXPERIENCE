@@ -52,18 +52,21 @@ function buildPayload(input: ReservationDraftInput) {
   })) : [];
 
   const services = input.services.map(service => {
+    const hotelPct = Number(service.hotel_commission_pct || 15);
+    const sellerPct = Number(service.seller_commission_pct || 5);
     const calc = economics(
       Number(service.unit_price || 0),
       Math.max(1, Number(service.pax || 1)),
       Number(service.operator_cost || 0),
-      Number(service.hotel_commission_pct || 0),
-      Number(service.seller_commission_pct || 0),
+      hotelPct,
+      sellerPct,
     );
     return {
       product_id: service.product_id || null,
       product_code: service.product_code || null,
       product_name: service.product_name.trim(),
       category: service.category || null,
+      service_type: service.category || null,
       date: service.date || null,
       start_time: service.start_time || null,
       pax: Math.max(1, Number(service.pax || 1)),
@@ -72,9 +75,9 @@ function buildPayload(input: ReservationDraftInput) {
       total_price: calc.total,
       operator_cost: calc.cost,
       margin: calc.margin,
-      hotel_commission_pct: Number(service.hotel_commission_pct || 0),
+      hotel_commission_pct: hotelPct,
       hotel_commission: calc.hotel,
-      seller_commission_pct: Number(service.seller_commission_pct || 0),
+      seller_commission_pct: sellerPct,
       seller_commission: calc.seller,
       platform_margin: calc.platform,
       supplier_id: service.supplier_id || null,
