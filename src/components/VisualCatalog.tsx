@@ -13,24 +13,24 @@ type CatalogFamily = {
   products: Product[];
 };
 
-const TOURISM_CATEGORIES = new Set([
+const VISIBLE_CATEGORIES = new Set([
   'Nocturno',
   'Tour día completo',
   'Tour medio día',
   'Transporte',
+  'SPA / Terapias',
 ]);
 
 function imagePaths(product: Product) {
   const slug = product.product_slug || product.code.replace(/_(regular|private|hotel|lowcost).*$/i, '');
   const category = String(product.category || '').toLowerCase();
-  const paths: string[] = [];
-  if (category.includes('transporte')) paths.push(`transporte/${slug}/cover.jpg`);
-  else if (category.includes('procedimiento')) paths.push(`procedimientos/${slug}/cover.jpg`);
-  else if (category.includes('salud')) paths.push(`salud/${slug}/cover.jpg`);
-  else if (category.includes('spa') || category.includes('terapia')) paths.push(`bienestar/${slug}/cover.jpg`);
-  else paths.push(`${slug}/cover.jpg`);
-  paths.push(`web-tours/products/${slug}/cover.png`);
-  return Array.from(new Set(paths));
+
+  if (category.includes('transporte')) return [`transporte/${slug}/cover.jpg`];
+  if (category.includes('spa') || category.includes('terapia')) return [`bienestar/${slug}/cover.jpg`];
+
+  // Tours y experiencias nocturnas usan exclusivamente el set curado
+  // sincronizado desde la carpeta oficial de Google Drive.
+  return [`web-tours/products/${slug}/cover.png`];
 }
 
 function publicImageUrl(path: string) {
@@ -86,7 +86,7 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
   const families = useMemo<CatalogFamily[]>(() => {
     const map = new Map<string, CatalogFamily>();
     products.forEach(product => {
-      if (!TOURISM_CATEGORIES.has(product.category)) return;
+      if (!VISIBLE_CATEGORIES.has(product.category)) return;
       const slug = product.product_slug || product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
       const current = map.get(slug) || {
         slug,
@@ -113,7 +113,7 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
 
   return <div className="visual-catalog">
     <section className="visual-catalog-hero">
-      <div><p className="eyebrow">CATÁLOGO VISUAL</p><h1>Experiencias que se pueden mostrar y vender.</h1><p>Las imágenes vienen del mismo <b>catalog-images</b> de HOTEL EXPERIENCE. Producto, modalidad y precio siguen naciendo de Supabase.</p></div>
+      <div><p className="eyebrow">CATÁLOGO VISUAL</p><h1>Experiencias que se pueden mostrar y vender.</h1><p>Las imágenes de turismo usan el set curado de HOTEL EXPERIENCE sincronizado desde Google Drive. Producto, modalidad y precio siguen naciendo de Supabase.</p></div>
       <div className="visual-catalog-count"><span>Experiencias</span><strong>{families.length}</strong><small>{visibleProductsCount} tarifas / modalidades activas</small></div>
     </section>
 
