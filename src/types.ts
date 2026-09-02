@@ -84,6 +84,8 @@ export type Lead = {
   checkin?: string | null;
   checkout?: string | null;
   contacto?: string | null;
+  nationality?: string | null;
+  stay_days?: number | null;
   prioridad?: string | null;
   estado: string;
   canal?: string | null;
