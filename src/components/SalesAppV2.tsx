@@ -39,7 +39,12 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
       const [reference, leads, services, payments] = await Promise.all([
         loadReferenceData(), loadLeads(), loadServices(), loadPayments(),
       ]);
-      setData({ ...reference, leads, services, payments });
+      const activeLeads = leads.filter(lead => String(lead.lifecycle_stage || 'commercial') !== 'historical');
+      const activeLeadIds = new Set(activeLeads.map(lead => lead.id));
+      const activeServices = services.filter(service => activeLeadIds.has(service.lead_id));
+      const activeServiceIds = new Set(activeServices.map(service => service.id));
+      const activePayments = payments.filter(payment => Boolean(payment.lead_service_id && activeServiceIds.has(payment.lead_service_id)));
+      setData({ ...reference, leads: activeLeads, services: activeServices, payments: activePayments });
     } catch (e: any) {
       setError(e?.message || 'No fue posible cargar los datos.');
     } finally { setLoading(false); }
