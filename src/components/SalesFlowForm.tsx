@@ -4,6 +4,7 @@ import {
   Plus, Send, Users, X,
 } from 'lucide-react';
 import { arrivalPriority, createSale, loadLeadPassengers, requestPartner, stayLength } from '../lib/sales';
+import { loadOperationalPassengerData, persistOperationalPassengerData } from '../lib/operationalSales';
 import { clp, economics, resolveProductPrice } from '../lib/money';
 import { confirmReservation, updateReservationDraft, type ReservationDraftInput } from '../lib/reservationSales';
 import {
@@ -17,6 +18,7 @@ import type {
 } from '../types';
 import { ProductWorkspace } from './SalesWorkspaces';
 import './SalesFlowForm.css';
+import './SalesFlowOperational.css';
 
 const channels = ['Recepción', 'QR Hotel', 'Base de datos hotel', 'Web', 'Campaña', 'Email', 'Vendedor', 'Venta directa', 'Otro'];
 const steps = [
@@ -30,8 +32,8 @@ const steps = [
 
 function blankPassenger(primary: boolean): PassengerDraft {
   return {
-    full_name: '', email: '', phone: '', nationality: '', document_type: 'Pasaporte',
-    document_number: '', birth_date: '', dietary_restrictions: '', medical_notes: '', is_primary: primary,
+    full_name: '', first_name: '', last_name: '', email: '', phone: '', nationality: '', document_type: 'Pasaporte',
+    document_number: '', birth_date: '', dietary_restrictions: '', gender: '', disability_type: '', medical_notes: '', is_primary: primary,
   };
 }
 
@@ -55,6 +57,7 @@ function serviceToDraft(service: LeadService): ServiceDraft {
     hotel_commission_pct: margin > 0 ? (Number(service.comision_hotel || 0) / margin) * 100 : 0,
     seller_commission_pct: margin > 0 ? (Number(service.comision_vendedor || 0) / margin) * 100 : 0,
     notes: service.observacion || '',
+    passenger_indexes: Array.from({ length: pax }, (_, index) => index),
   };
 }
 
@@ -171,28 +174,46 @@ export default function SalesFlowForm({
       ...(current[index] || blankPassenger(index === 0)),
       is_primary: index === 0,
     })));
+    setDraftServices(current => current.map(service => {
+      const previous = (service.passenger_indexes || []).filter(index => index < paxCount);
+      const indexes = previous.length ? previous : Array.from({ length: Math.min(paxCount, Math.max(1, Number(service.pax || 1))) }, (_, index) => index);
+      return { ...service, passenger_indexes: indexes, pax: indexes.length || 1 };
+    }));
   }, [paxCount]);
 
   useEffect(() => {
     if (!initialLeadId) return;
     let alive = true;
-    void Promise.all([loadLeadPassengers(initialLeadId), loadLatestQuote(initialLeadId)]).then(([rows, latest]) => {
+    void Promise.all([loadLeadPassengers(initialLeadId), loadLatestQuote(initialLeadId), loadOperationalPassengerData(initialLeadId)]).then(([rows, latest, operational]) => {
       if (!alive) return;
       if (rows.length) {
         setPaxCount(Math.max(1, rows.length));
-        setPassengers(rows.map((row: any, index: number) => ({
-          full_name: /^Cliente por completar$|^Acompañante \d+$/i.test(String(row.full_name || '')) ? '' : row.full_name || '',
-          email: row.email || '', phone: row.phone || '',
-          nationality: row.nationality || (index === 0 ? existingLead?.nationality || '' : ''),
-          document_type: row.document_type || 'Pasaporte', document_number: row.document_number || '',
-          birth_date: row.birth_date || '', dietary_restrictions: row.dietary_restrictions || '',
-          medical_notes: row.medical_notes || '', is_primary: index === 0,
-        })));
+        setPassengers(rows.map((row: any, index: number) => {
+          const op = operational.passengers[index];
+          return {
+            full_name: /^Cliente por completar$|^Acompañante \d+$/i.test(String(row.full_name || '')) ? '' : row.full_name || '',
+            first_name: op?.first_name || '', last_name: op?.last_name || '',
+            email: row.email || '', phone: row.phone || '',
+            nationality: row.nationality || (index === 0 ? existingLead?.nationality || '' : ''),
+            document_type: row.document_type || 'Pasaporte', document_number: row.document_number || '',
+            birth_date: row.birth_date || '', dietary_restrictions: row.dietary_restrictions || '',
+            gender: op?.gender || '', disability_type: op?.disability_type || '',
+            medical_notes: op?.medical_notes || row.medical_notes || '', is_primary: index === 0,
+          };
+        }));
       }
+      setDraftServices(current => current.map((service, index) => {
+        const saved = operational.participantMatrix[index];
+        return saved?.passenger_indexes?.length ? { ...service, passenger_indexes: saved.passenger_indexes, pax: saved.passenger_indexes.length } : service;
+      }));
       setQuote(latest);
     }).catch((error: any) => setMessage(error?.message || 'No se pudo cargar el ingreso.'));
     return () => { alive = false; };
   }, [initialLeadId]);
+
+  function allPassengerIndexes() {
+    return Array.from({ length: paxCount }, (_, index) => index);
+  }
 
   function addProductById(id: string) {
     const product = products.find(item => item.id === id);
@@ -202,6 +223,7 @@ export default function SalesFlowForm({
       product_id: product.id, product_code: product.code, product_name: product.name, category: product.category,
       date: '', start_time: '', pax: paxCount, modality: product.price_mode, unit_price: known ?? 0,
       operator_cost: 0, supplier_id: '', supplier_name: '', hotel_commission_pct: 0, seller_commission_pct: 0, notes: '',
+      passenger_indexes: allPassengerIndexes(),
     }]);
     setCatalogOpen(false);
   }
@@ -214,15 +236,32 @@ export default function SalesFlowForm({
     setDraftServices(current => [...current, {
       product_id: '', product_code: 'MANUAL', product_name: '', category: 'Manual', date: '', start_time: '',
       pax: paxCount, modality: 'manual', unit_price: 0, operator_cost: 0, supplier_id: '', supplier_name: '',
-      hotel_commission_pct: 0, seller_commission_pct: 0, notes: '',
+      hotel_commission_pct: 0, seller_commission_pct: 0, notes: '', passenger_indexes: allPassengerIndexes(),
     }]);
   }
 
   function patchPassenger(index: number, patch: Partial<PassengerDraft>) {
     setPassengers(current => current.map((passenger, row) => row === index ? { ...passenger, ...patch } : passenger));
   }
+  function patchPassengerName(index: number, field: 'first_name' | 'last_name', value: string) {
+    setPassengers(current => current.map((passenger, row) => {
+      if (row !== index) return passenger;
+      const next = { ...passenger, [field]: value };
+      const composed = `${next.first_name || ''} ${next.last_name || ''}`.trim();
+      return { ...next, full_name: composed || passenger.full_name };
+    }));
+  }
   function patchService(index: number, patch: Partial<ServiceDraft>) {
     setDraftServices(current => current.map((service, row) => row === index ? { ...service, ...patch } : service));
+  }
+  function toggleServicePassenger(serviceIndex: number, passengerIndex: number) {
+    setDraftServices(current => current.map((service, row) => {
+      if (row !== serviceIndex) return service;
+      const selected = new Set(service.passenger_indexes || []);
+      if (selected.has(passengerIndex)) selected.delete(passengerIndex); else selected.add(passengerIndex);
+      const indexes = Array.from(selected).sort((a, b) => a - b);
+      return { ...service, passenger_indexes: indexes, pax: Math.max(1, indexes.length) };
+    }));
   }
 
   function draftInput(): ReservationDraftInput {
@@ -253,6 +292,7 @@ export default function SalesFlowForm({
     if (!sellerProfileId) throw new Error('Selecciona el responsable de la venta.');
     const identity = input.contact.trim() || input.passengers[0]?.full_name?.trim() || input.passengers[0]?.email?.trim() || input.passengers[0]?.phone?.trim();
     if (!identity) throw new Error('Para guardar el ingreso necesitamos al menos nombre, teléfono o email del cliente principal.');
+    if (input.services.some(service => !(service.passenger_indexes?.length))) throw new Error('Cada producto debe tener al menos un pasajero seleccionado.');
 
     let id = leadId;
     if (id) {
@@ -267,6 +307,7 @@ export default function SalesFlowForm({
       id = created.lead_id; setLeadId(created.lead_id); setLeadCode(created.lead_code);
       await updateReservationDraft(id, input);
     }
+    await persistOperationalPassengerData(id, passengers, draftServices);
     await updateSalesFlow(id, { ...metadata(stage), sales_stage: stage });
     if (!silent) setMessage(`Ingreso ${leadCode || reference} guardado sin enviar a Operaciones.`);
     await onSaved();
@@ -391,6 +432,7 @@ export default function SalesFlowForm({
       if (!service.product_name.trim()) missing.push(`nombre ítem ${index + 1}`);
       if (!service.date) missing.push(`fecha ${service.product_name || index + 1}`);
       if (!(service.unit_price > 0)) missing.push(`precio ${service.product_name || index + 1}`);
+      if (!service.passenger_indexes?.length) missing.push(`pasajeros ${service.product_name || index + 1}`);
     });
     return Array.from(new Set(missing));
   }, [quoteAccepted, paymentSent, itinerarySent, checkin, checkout, contact, passengers, draftServices]);
@@ -459,21 +501,23 @@ export default function SalesFlowForm({
     </section>}
 
     {activeStep === 2 && <section className="flow-card">
-      <div className="flow-title-row"><FlowTitle number="03" title="Carta de cotización" text="Productos y precios viven dentro del mismo ingreso. La carta toma de aquí fechas, modalidad, tramos y política vigente."/><div className="top-actions"><button className="button ghost" onClick={addManualItem}><Plus size={15}/> Ítem manual</button><button className="button dark" onClick={() => setCatalogOpen(true)}><Boxes size={15}/> Catálogo</button></div></div>
+      <div className="flow-title-row"><FlowTitle number="03" title="Carta de cotización" text="Productos y precios viven dentro del mismo ingreso. Aquí también indicas exactamente qué pasajero participa en cada servicio."/><div className="top-actions"><button className="button ghost" onClick={addManualItem}><Plus size={15}/> Ítem manual</button><button className="button dark" onClick={() => setCatalogOpen(true)}><Boxes size={15}/> Catálogo</button></div></div>
       {!draftServices.length ? <div className="empty-state">Agrega al menos un producto para crear la carta de cotización.</div> : <div className="quote-products">{draftServices.map((service, index) => {
         const product = products.find(item => item.id === service.product_id);
         const calc = economics(service.unit_price, service.pax, service.operator_cost, 0, 0);
-        return <article key={`${service.product_id || 'manual'}-${index}`}><header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header><div className="form-grid four"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Pax<input type="number" min="1" value={service.pax} onChange={event => patchService(index, { pax: Math.max(1, Number(event.target.value || 1)) })}/></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><label>Información para el cliente<input value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Horario, punto de encuentro, condiciones particulares…"/></label><div className="quote-product-total"><span>Total servicio</span><strong>{clp(calc.total)}</strong></div></article>;
+        const selected = new Set(service.passenger_indexes || []);
+        return <article key={`${service.product_id || 'manual'}-${index}`}><header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header><div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div><label>Información para el cliente<input value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Horario, punto de encuentro, condiciones particulares…"/></label><div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div></article>;
       })}</div>}
       {quote && <section className="quote-document-status"><div><FileText size={20}/><span><strong>{quote.quote_code}</strong><small>Versión {quote.version} · {quote.status}</small></span></div><div className="quote-policy-mini"><strong>Cancelación — resumen de la política vigente</strong>{concisePolicy(quote.policy_summary).slice(0, 5).map(item => <span key={item}>• {item}</span>)}</div><div className="top-actions"><button className="button ghost" onClick={() => downloadCustomerQuote(quote, { hotelName: hotel?.name, clientName: passengers[0]?.full_name || reference })}><Download size={15}/> PDF</button><button className="button dark" disabled={busy} onClick={() => void shareQuote()}><Send size={15}/> Compartir</button>{!quoteSent && <button className="button ghost" disabled={busy} onClick={() => void markSent()}>Registrar enviada</button>}</div></section>}
       <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={() => void persist('data_capture')}>Guardar productos</button><button className="button dark big" disabled={busy || !draftServices.length} onClick={() => void generateQuote()}>{quote ? 'Crear nueva versión' : 'Crear carta cotización'} <FileText size={16}/></button>{quoteSent && !quoteAccepted && <button className="button dark big" disabled={busy} onClick={() => void acceptQuote()}><CheckCircle2 size={16}/> Cliente acepta</button>}</div>
     </section>}
 
     {activeStep === 3 && <section className="flow-card">
-      <FlowTitle number="04" title="Aceptación, pago y datos finales" text="Una vez aceptada la cotización, se envía el link de pago y se completa la información que necesita la reserva."/>
+      <FlowTitle number="04" title="Aceptación, pago y datos finales" text="Una vez aceptada la cotización, se envía el link de pago y se completa la información que alimentará la reserva y las listas operativas."/>
       <section className="payment-link-card"><div><strong>Link de pago</strong><span>Se guarda en el mismo ingreso; compartirlo no crea otra reserva.</span></div><div className="payment-link-row"><input value={paymentLink} onChange={event => setPaymentLink(event.target.value)} placeholder="https://…"/><button className="button dark" disabled={busy || !paymentLink.trim()} onClick={() => void sendPayment()}><Send size={15}/> Compartir link</button><button className="button ghost" disabled={!paymentLink.trim()} onClick={() => navigator.clipboard.writeText(paymentLink)}><Copy size={15}/></button></div></section>
       <div className="form-grid four"><label>Vuelo llegada <span>si aplica</span><input value={arrivalFlight} onChange={event => setArrivalFlight(event.target.value)} placeholder="JA 123"/></label><label>Vuelo salida <span>si aplica</span><input value={departureFlight} onChange={event => setDepartureFlight(event.target.value)} placeholder="LA 456"/></label><label>Punto de recogida<input value={pickupLocation} onChange={event => setPickupLocation(event.target.value)} placeholder="Hotel / aeropuerto / dirección"/></label><label>Habitación <span>si aplica</span><input value={hotelRoom} onChange={event => setHotelRoom(event.target.value)}/></label></div>
-      <div className="full-passenger-stack">{passengers.map((passenger, index) => <article key={index}><header><Users size={15}/><strong>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</strong></header><div className="form-grid four"><label>Nombre completo<input value={passenger.full_name} onChange={event => patchPassenger(index, { full_name: event.target.value })}/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label><label>Nacionalidad<input value={passenger.nationality} onChange={event => patchPassenger(index, { nationality: event.target.value })}/></label></div><div className="form-grid four"><label>Tipo documento<select value={passenger.document_type} onChange={event => patchPassenger(index, { document_type: event.target.value })}><option>Pasaporte</option><option>Cédula</option><option>Otro</option></select></label><label>N° documento<input value={passenger.document_number} onChange={event => patchPassenger(index, { document_number: event.target.value })}/></label><label>Nacimiento<input type="date" value={passenger.birth_date} onChange={event => patchPassenger(index, { birth_date: event.target.value })}/></label><label>Restricciones alimentarias<input value={passenger.dietary_restrictions} onChange={event => patchPassenger(index, { dietary_restrictions: event.target.value })} placeholder="Ninguna / detalle"/></label></div><label>Observaciones médicas o de movilidad<textarea value={passenger.medical_notes || ''} onChange={event => patchPassenger(index, { medical_notes: event.target.value })} placeholder="Solo si corresponde"/></label></article>)}</div>
+      <div className="operational-note"><strong>Datos para parques y manifiestos</strong><span>Género, discapacidad y observaciones se guardan solo cuando son declarados. No se infieren.</span></div>
+      <div className="full-passenger-stack">{passengers.map((passenger, index) => <article key={index}><header><Users size={15}/><strong>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</strong></header><div className="form-grid four"><label>Nombre(s)<input value={passenger.first_name || ''} onChange={event => patchPassengerName(index, 'first_name', event.target.value)} placeholder={passenger.full_name || 'Nombre'}/></label><label>Apellido(s)<input value={passenger.last_name || ''} onChange={event => patchPassengerName(index, 'last_name', event.target.value)}/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div><div className="form-grid four"><label>Nacionalidad<input value={passenger.nationality} onChange={event => patchPassenger(index, { nationality: event.target.value })}/></label><label>Tipo documento<select value={passenger.document_type} onChange={event => patchPassenger(index, { document_type: event.target.value })}><option>Pasaporte</option><option>Cédula</option><option>Otro</option></select></label><label>N° documento<input value={passenger.document_number} onChange={event => patchPassenger(index, { document_number: event.target.value })}/></label><label>Nacimiento<input type="date" value={passenger.birth_date} onChange={event => patchPassenger(index, { birth_date: event.target.value })}/></label></div><div className="form-grid three"><label>Género declarado<select value={passenger.gender || ''} onChange={event => patchPassenger(index, { gender: event.target.value })}><option value="">Sin informar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="X">Otro / X</option></select></label><label>Restricciones alimentarias<input value={passenger.dietary_restrictions} onChange={event => patchPassenger(index, { dietary_restrictions: event.target.value })} placeholder="Ninguna / detalle"/></label><label>Discapacidad / movilidad <span>si corresponde</span><input value={passenger.disability_type || ''} onChange={event => patchPassenger(index, { disability_type: event.target.value })} placeholder="Física, sensorial, apoyo requerido…"/></label></div><label>Observaciones médicas o de movilidad<textarea value={passenger.medical_notes || ''} onChange={event => patchPassenger(index, { medical_notes: event.target.value })} placeholder="Solo información necesaria para ejecutar el servicio"/></label></article>)}</div>
       <label>Observaciones generales<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Acuerdos y datos relevantes para completar la reserva"/></label>
       <FlowActions busy={busy} onSave={() => void persist(paymentSent ? 'payment_link_sent' : 'accepted_payment')} onNext={async () => { setBusy(true); try { await persist(paymentSent ? 'payment_link_sent' : 'accepted_payment', true); if (!paymentSent) throw new Error('Comparte el link de pago antes de avanzar al itinerario.'); setActiveStep(4); } catch (error: any) { setMessage(error?.message || 'No se pudo avanzar.'); } finally { setBusy(false); } }} nextLabel="Preparar itinerario"/>
     </section>}
@@ -486,7 +530,7 @@ export default function SalesFlowForm({
 
     {activeStep === 5 && <section className="flow-card final-flow-card">
       <FlowTitle number="06" title="Completar reserva" text="Este es el único botón que entrega la reserva a HOTEL EXPERIENCE Operaciones. Se entrega el mismo registro, sin duplicar clientes, pasajeros ni productos."/>
-      <div className={`final-gate ${finalMissing.length ? '' : 'ready'}`}><div><span>{finalMissing.length ? 'AÚN NO LISTA' : 'LISTA PARA OPERACIONES'}</span><strong>{finalMissing.length ? `Falta: ${finalMissing.join(' · ')}` : 'Cotización, aceptación, datos e itinerario están vinculados.'}</strong></div><div><span>Referencia</span><strong>{reference || leadCode}</strong><small>{paxCount} pax · {draftServices.length} producto(s)</small></div></div>
+      <div className={`final-gate ${finalMissing.length ? '' : 'ready'}`}><div><span>{finalMissing.length ? 'AÚN NO LISTA' : 'LISTA PARA OPERACIONES'}</span><strong>{finalMissing.length ? `Falta: ${finalMissing.join(' · ')}` : 'Cotización, aceptación, pasajeros, datos e itinerario están vinculados.'}</strong></div><div><span>Referencia</span><strong>{reference || leadCode}</strong><small>{paxCount} pax · {draftServices.length} producto(s)</small></div></div>
       <button className="button dark huge wide" disabled={busy || finalMissing.length > 0} onClick={() => void completeReservation()}>{busy ? 'Procesando…' : 'Completar reserva y enviar a Operaciones'} <ArrowRight size={18}/></button>
     </section>}
 
