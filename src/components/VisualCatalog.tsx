@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, ImageOff, Minus, Plus, Search, Users } from 'lucide-react';
+import { ArrowRight, Check, ImageOff, Search, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { clp, resolveProductPrice } from '../lib/money';
 import type { Product } from '../types';
@@ -13,6 +13,12 @@ type CatalogFamily = {
   products: Product[];
 };
 
+type VariantMeta = {
+  title: string;
+  eyebrow: string;
+  description: string;
+};
+
 const VISIBLE_CATEGORIES = new Set([
   'Nocturno',
   'Tour día completo',
@@ -21,15 +27,34 @@ const VISIBLE_CATEGORIES = new Set([
   'SPA / Terapias',
 ]);
 
-function imagePaths(product: Product) {
-  const slug = product.product_slug || product.code.replace(/_(regular|private|hotel|lowcost).*$/i, '');
-  const category = String(product.category || '').toLowerCase();
+function normalizeSlug(value: string) {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
 
+function rawSlug(product: Product) {
+  return product.product_slug || normalizeSlug(product.name);
+}
+
+/**
+ * Navegación comercial curada. Vamos incorporando cada producto a medida que
+ * validamos su familia. Supabase sigue guardando las tarifas/modalidades reales.
+ */
+function familySlug(product: Product) {
+  const slug = rawSlug(product);
+  if (slug === 'astronomico' || slug.startsWith('astronomico_')) return 'astronomico';
+  return slug;
+}
+
+function familyName(slug: string, product: Product) {
+  if (slug === 'astronomico') return 'Astronómico';
+  return product.name;
+}
+
+function imagePaths(product: Product) {
+  const slug = rawSlug(product);
+  const category = String(product.category || '').toLowerCase();
   if (category.includes('transporte')) return [`transporte/${slug}/cover.jpg`];
   if (category.includes('spa') || category.includes('terapia')) return [`bienestar/${slug}/cover.jpg`];
-
-  // Tours y experiencias nocturnas usan exclusivamente el set curado
-  // sincronizado desde la carpeta oficial de Google Drive.
   return [`web-tours/products/${slug}/cover.png`];
 }
 
@@ -48,21 +73,62 @@ function CatalogImage({ product, alt, className }: { product: Product; alt: stri
     src={candidates[index]}
     alt={alt}
     loading="lazy"
-    onError={()=>{
+    onError={() => {
       if (index < candidates.length - 1) setIndex(current => current + 1);
       else setFailed(true);
     }}
   />;
 }
 
-function modeLabel(mode: string) {
-  return ({
-    private_per_pax: 'Privado',
-    regular_per_pax: 'Compartido',
-    regular_commission: 'Regular',
-    hotel_fixed: 'Precio hotel',
-    lowcost_transport: 'Transporte',
-  } as Record<string,string>)[mode] || mode.split('_').join(' ');
+function variantMeta(product: Product): VariantMeta {
+  const slug = rawSlug(product);
+  if (slug === 'astronomico_a_desierto_abierto') return {
+    title: 'Desierto abierto', eyebrow: 'Privado · naturaleza',
+    description: product.description || 'Observación privada a cielo abierto, lejos del centro.',
+  };
+  if (slug === 'astronomico_en_hotel') return {
+    title: 'En tu hotel', eyebrow: 'Privado · hotel',
+    description: product.description || 'La experiencia astronómica llega al hotel del pasajero.',
+  };
+  if (slug === 'astronomico_privado') return {
+    title: 'Privado', eyebrow: 'Experiencia dedicada',
+    description: product.description || 'Una experiencia astronómica dedicada exclusivamente al grupo.',
+  };
+  if (slug === 'astronomico' && product.price_mode === 'regular_per_pax') return {
+    title: 'Compartido', eyebrow: 'Grupo compartido',
+    description: product.description || 'Astronómico en grupo con tarifa por pasajero.',
+  };
+  if (slug === 'astronomico' && product.price_mode === 'regular_commission') return {
+    title: 'Regular', eyebrow: 'Alternativa regular',
+    description: product.description || 'Alternativa regular del tour astronómico.',
+  };
+  const label = product.price_mode.replace(/_/g, ' ');
+  return { title: product.name, eyebrow: label, description: product.description || product.schedule || 'Modalidad disponible.' };
+}
+
+function variantRank(product: Product) {
+  const meta = variantMeta(product).title;
+  return ({ Compartido: 1, Regular: 2, Privado: 3, 'Desierto abierto': 4, 'En tu hotel': 5 } as Record<string, number>)[meta] || 20;
+}
+
+function familyMediaProduct(family: CatalogFamily) {
+  if (family.slug === 'astronomico') {
+    return family.products.find(product => rawSlug(product) === 'astronomico' && product.price_mode === 'regular_per_pax')
+      || family.products.find(product => rawSlug(product) === 'astronomico')
+      || family.products[0];
+  }
+  return family.products[0];
+}
+
+function availablePax(product: Product) {
+  const numeric = Object.entries(product.prices || {})
+    .filter(([key, value]) => /^\d+$/.test(key) && typeof value === 'number' && value > 0)
+    .map(([key]) => Number(key))
+    .sort((a, b) => a - b);
+  if (numeric.length) return numeric;
+  // Tarifas regulares sin tramos explícitos siguen siendo por pasajero.
+  if (product.price_mode.includes('regular')) return [1, 2, 3, 4, 5, 6];
+  return [1];
 }
 
 function quoteFor(product: Product, pax: number) {
@@ -77,20 +143,21 @@ function quoteFor(product: Product, pax: number) {
   };
 }
 
-export default function VisualCatalog({ products, onQuote }: { products: Product[]; onQuote: (productId: string)=>void }) {
+export default function VisualCatalog({ products, onQuote }: { products: Product[]; onQuote: (productId: string) => void }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Todos');
   const [selectedSlug, setSelectedSlug] = useState('');
-  const [pax, setPax] = useState(2);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedPax, setSelectedPax] = useState<number | null>(null);
 
   const families = useMemo<CatalogFamily[]>(() => {
     const map = new Map<string, CatalogFamily>();
     products.forEach(product => {
       if (!VISIBLE_CATEGORIES.has(product.category)) return;
-      const slug = product.product_slug || product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      const slug = familySlug(product);
       const current = map.get(slug) || {
         slug,
-        name: product.name,
+        name: familyName(slug, product),
         category: product.category,
         description: product.description || '',
         products: [],
@@ -99,46 +166,66 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
       if (!current.description && product.description) current.description = product.description;
       map.set(slug, current);
     });
-    return Array.from(map.values()).sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
+    return Array.from(map.values())
+      .map(family => ({ ...family, products: [...family.products].sort((a, b) => variantRank(a) - variantRank(b) || a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
   }, [products]);
 
-  const visibleProductsCount = useMemo(()=>families.reduce((total, family)=>total + family.products.length, 0), [families]);
-  const categories = useMemo(()=>['Todos', ...Array.from(new Set(families.map(item=>item.category)))], [families]);
-  const filtered = useMemo(()=>families.filter(item => {
-    const text = `${item.name} ${item.category} ${item.description} ${item.products.map(p=>p.code).join(' ')}`.toLowerCase();
+  const visibleProductsCount = useMemo(() => families.reduce((total, family) => total + family.products.length, 0), [families]);
+  const categories = useMemo(() => ['Todos', ...Array.from(new Set(families.map(item => item.category)))], [families]);
+  const filtered = useMemo(() => families.filter(item => {
+    const text = `${item.name} ${item.category} ${item.description} ${item.products.map(p => `${p.code} ${variantMeta(p).title}`).join(' ')}`.toLowerCase();
     return (category === 'Todos' || item.category === category) && text.includes(query.toLowerCase().trim());
   }), [families, query, category]);
 
-  const selected = families.find(item=>item.slug===selectedSlug) || null;
+  const selected = families.find(item => item.slug === selectedSlug) || null;
+  const selectedProduct = selected?.products.find(product => product.id === selectedProductId) || null;
+  const selectedQuote = selectedProduct && selectedPax != null ? quoteFor(selectedProduct, selectedPax) : null;
+  const paxOptions = selectedProduct ? availablePax(selectedProduct) : [];
+
+  function openFamily(slug: string) {
+    setSelectedSlug(slug);
+    setSelectedProductId('');
+    setSelectedPax(null);
+  }
+
+  function chooseVariant(productId: string) {
+    setSelectedProductId(productId);
+    setSelectedPax(null);
+  }
+
+  function closeFamily() {
+    setSelectedSlug('');
+    setSelectedProductId('');
+    setSelectedPax(null);
+  }
 
   return <div className="visual-catalog">
     <section className="visual-catalog-hero">
-      <div><p className="eyebrow">CATÁLOGO VISUAL</p><h1>Experiencias que se pueden mostrar y vender.</h1><p>Las imágenes de turismo usan el set curado de HOTEL EXPERIENCE sincronizado desde Google Drive. Producto, modalidad y precio siguen naciendo de Supabase.</p></div>
-      <div className="visual-catalog-count"><span>Experiencias</span><strong>{families.length}</strong><small>{visibleProductsCount} tarifas / modalidades activas</small></div>
+      <div><p className="eyebrow">CATÁLOGO VISUAL</p><h1>Primero la experiencia. Después la modalidad.</h1><p>Una vitrina corta para orientar la conversación: elegimos experiencia, alternativa y tramo. El precio aparece recién cuando la elección está definida.</p></div>
+      <div className="visual-catalog-count"><span>Experiencias</span><strong>{families.length}</strong><small>{visibleProductsCount} tarifas / modalidades reales en Supabase</small></div>
     </section>
 
     <section className="visual-catalog-toolbar">
-      <div className="visual-catalog-search"><Search size={17}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar experiencia, categoría o código…"/></div>
-      <select value={category} onChange={event=>setCategory(event.target.value)}>{categories.map(item=><option key={item}>{item}</option>)}</select>
+      <div className="visual-catalog-search"><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar experiencia o necesidad…"/></div>
+      <select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(item => <option key={item}>{item}</option>)}</select>
     </section>
 
     <section className="visual-catalog-grid">
-      {filtered.map(family=>{
-        const heroProduct = family.products[0];
-        const quotes = family.products.map(product=>quoteFor(product,2)).filter(quote=>quote.valid);
-        const from = quotes.length ? Math.min(...quotes.map(quote=>quote.unit)) : null;
+      {filtered.map(family => {
+        const mediaProduct = familyMediaProduct(family);
         return <article className="visual-product-card" key={family.slug}>
-          <button className="visual-product-image-button" onClick={()=>setSelectedSlug(family.slug)} aria-label={`Abrir ${family.name}`}>
-            <CatalogImage product={heroProduct} alt={family.name} className="visual-product-image"/>
+          <button className="visual-product-image-button" onClick={() => openFamily(family.slug)} aria-label={`Abrir ${family.name}`}>
+            <CatalogImage product={mediaProduct} alt={family.name} className="visual-product-image"/>
             <span className="visual-product-category">{family.category}</span>
           </button>
           <div className="visual-product-copy">
-            <span className="visual-product-kicker">{family.products.length} modalidad(es)</span>
+            <span className="visual-product-kicker">{family.products.length} alternativa(s)</span>
             <h2>{family.name}</h2>
             <p>{family.description || 'Experiencia disponible en el catálogo HOTEL EXPERIENCE.'}</p>
-            <div className="visual-product-bottom">
-              <div><span>{from!=null?'Desde':'Tarifa'}</span><strong>{from!=null?clp(from):'Cotizar'}</strong></div>
-              <button className="button dark" onClick={()=>setSelectedSlug(family.slug)}>Ver experiencia <ArrowRight size={15}/></button>
+            <div className="visual-product-bottom compact">
+              <div><span>Navegación</span><strong>Explorar opciones</strong></div>
+              <button className="button dark" onClick={() => openFamily(family.slug)}>Abrir <ArrowRight size={15}/></button>
             </div>
           </div>
         </article>;
@@ -146,28 +233,45 @@ export default function VisualCatalog({ products, onQuote }: { products: Product
       {!filtered.length && <div className="visual-catalog-empty"><Search size={22}/><strong>No encontramos experiencias.</strong><span>Prueba otra categoría o búsqueda.</span></div>}
     </section>
 
-    {selected && <div className="catalog-detail-backdrop" onClick={()=>setSelectedSlug('')}>
-      <article className="catalog-detail-sheet" onClick={event=>event.stopPropagation()}>
-        <button className="catalog-detail-close" onClick={()=>setSelectedSlug('')}>×</button>
-        <div className="catalog-detail-media"><CatalogImage product={selected.products[0]} alt={selected.name} className="catalog-detail-image"/></div>
+    {selected && <div className="catalog-detail-backdrop" onClick={closeFamily}>
+      <article className="catalog-detail-sheet" onClick={event => event.stopPropagation()}>
+        <button className="catalog-detail-close" onClick={closeFamily}>×</button>
+        <div className="catalog-detail-media"><CatalogImage product={familyMediaProduct(selected)} alt={selected.name} className="catalog-detail-image"/></div>
         <div className="catalog-detail-body">
-          <div><p className="eyebrow">{selected.category}</p><h2>{selected.name}</h2><p className="catalog-detail-description">{selected.description || 'Experiencia disponible para cotización.'}</p></div>
-          <div className="catalog-pax-row">
-            <div><Users size={17}/><span><strong>Tarifa para el grupo</strong><small>Selecciona pasajeros para ver los tramos reales.</small></span></div>
-            <div className="catalog-pax-stepper"><button onClick={()=>setPax(Math.max(1,pax-1))}><Minus size={14}/></button><strong>{pax}</strong><span>pax</span><button onClick={()=>setPax(Math.min(12,pax+1))}><Plus size={14}/></button></div>
-          </div>
-          <div className="catalog-variant-list">
-            {selected.products.map(product=>{
-              const quote = quoteFor(product,pax);
-              return <div className="catalog-variant-row" key={product.id}>
-                <div><span className="visual-product-kicker">{product.code}</span><strong>{modeLabel(product.price_mode)}</strong><small>{product.schedule || product.description || 'Modalidad disponible'}</small></div>
-                <div className="catalog-variant-price">
-                  {quote.valid?<><span>{clp(quote.unit)} {quote.label}</span><strong>{clp(quote.total)}</strong><small>Total {pax} pax</small></>:<><strong>Cotización manual</strong><small>No inventamos tarifa</small></>}
-                </div>
-                <button className="button dark" onClick={()=>onQuote(product.id)}>Cotizar <ArrowRight size={15}/></button>
-              </div>;
-            })}
-          </div>
+          <div><p className="eyebrow">{selected.category}</p><h2>{selected.name}</h2><p className="catalog-detail-description">{selected.slug === 'astronomico' ? 'Una sola experiencia astronómica, distintas formas de vivirla. Las alternativas comparten la misma identidad visual; cambia la modalidad y su tarifa real.' : selected.description || 'Experiencia disponible para cotización.'}</p></div>
+
+          <section className="catalog-decision-block">
+            <header><span>01</span><div><strong>¿Cómo quieres vivirlo?</strong><small>Elige una alternativa. Todavía no mostramos precio.</small></div></header>
+            <div className="catalog-idea-map">
+              {selected.products.map((product, index) => {
+                const meta = variantMeta(product);
+                const active = selectedProductId === product.id;
+                return <button key={product.id} className={active ? 'active' : ''} onClick={() => chooseVariant(product.id)}>
+                  <span className="idea-number">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="idea-copy"><small>{meta.eyebrow}</small><strong>{meta.title}</strong><em>{meta.description}</em></span>
+                  <span className="idea-check">{active ? <Check size={15}/> : <ArrowRight size={15}/>}</span>
+                </button>;
+              })}
+            </div>
+          </section>
+
+          <section className={`catalog-decision-block ${selectedProduct ? '' : 'muted-step'}`}>
+            <header><span>02</span><div><strong>Selecciona el tramo</strong><small>{selectedProduct ? `${variantMeta(selectedProduct).title} · elige cantidad de pasajeros para resolver la tarifa.` : 'Primero elige una alternativa.'}</small></div></header>
+            {selectedProduct && <div className="catalog-pax-options">
+              {paxOptions.map(amount => <button key={amount} className={selectedPax === amount ? 'active' : ''} onClick={() => setSelectedPax(amount)}><Users size={14}/><strong>{amount}</strong><span>pax</span></button>)}
+            </div>}
+          </section>
+
+          <section className={`catalog-price-reveal ${selectedQuote ? 'ready' : ''}`}>
+            {!selectedProduct ? <><span>03</span><div><strong>Precio</strong><small>Se revela después de elegir modalidad y tramo.</small></div></> : selectedPax == null ? <><span>03</span><div><strong>Precio aún oculto</strong><small>Selecciona el tramo para ver la tarifa real.</small></div></> : selectedQuote?.valid ? <>
+              <div className="catalog-price-context"><span>03 · TARIFA SELECCIONADA</span><strong>{variantMeta(selectedProduct).title} · {selectedPax} pax</strong><small>{clp(selectedQuote.unit)} {selectedQuote.label}</small></div>
+              <div className="catalog-price-total"><span>Total</span><strong>{clp(selectedQuote.total)}</strong></div>
+              <button className="button dark" onClick={() => onQuote(selectedProduct.id)}>Usar en cotización <ArrowRight size={15}/></button>
+            </> : <>
+              <div className="catalog-price-context"><span>03 · TARIFA</span><strong>Cotización manual</strong><small>Ese tramo no tiene una tarifa automática registrada. No inventamos precio.</small></div>
+              <button className="button dark" onClick={() => onQuote(selectedProduct.id)}>Abrir cotización <ArrowRight size={15}/></button>
+            </>}
+          </section>
         </div>
       </article>
     </div>}
