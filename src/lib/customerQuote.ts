@@ -2,42 +2,22 @@ import { jsPDF } from 'jspdf';
 import type { SalesQuoteSnapshot } from '../types';
 import { humanModality } from './salesFlow';
 
-const INK: [number, number, number] = [27, 27, 25];
-const MUTED: [number, number, number] = [111, 106, 99];
-const LINE: [number, number, number] = [224, 220, 212];
-const PAPER: [number, number, number] = [249, 248, 245];
-const ACCENT: [number, number, number] = [145, 128, 108];
+const INK: [number, number, number] = [25, 25, 23];
+const MUTED: [number, number, number] = [108, 104, 98];
+const LINE: [number, number, number] = [222, 218, 210];
+const PAPER: [number, number, number] = [248, 247, 244];
+const ACCENT: [number, number, number] = [143, 126, 106];
+const WHITE: [number, number, number] = [255, 255, 255];
 
 const money = (value: unknown) => new Intl.NumberFormat('es-CL', {
   style: 'currency', currency: 'CLP', maximumFractionDigits: 0,
 }).format(Number(value || 0));
 
-const date = (value: unknown) => {
-  if (!value) return 'Por confirmar';
-  const raw = String(value);
-  const parsed = new Date(`${raw.slice(0, 10)}T12:00:00`);
-  return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString('es-CL', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  });
-};
-
-function dateParts(value: unknown) {
-  if (!value) return { day: '—', month: 'POR DEFINIR', year: '' };
-  const raw = String(value);
-  const parsed = new Date(`${raw.slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return { day: raw, month: '', year: '' };
-  return {
-    day: parsed.toLocaleDateString('es-CL', { day: '2-digit' }),
-    month: parsed.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '').toUpperCase(),
-    year: String(parsed.getFullYear()),
-  };
-}
-
 function cleanCommercialName(value: unknown) {
   const raw = String(value || 'Experiencia').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   return raw
     .replace(/\s*[([]?\b(PRUEBA|TEST|DEMO|QA|DEV)\b[\])]?\s*$/i, '')
-    .replace(/\b(PRUEBA|TEST|DEMO)\b/gi, '')
+    .replace(/\b(PRUEBA|TEST|DEMO|QA|DEV)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim() || 'Experiencia';
 }
@@ -47,11 +27,61 @@ function commercialQuoteCode(value: string) {
   return match ? `${match[1]} · V${match[2]}` : value;
 }
 
+function parseDate(value: unknown) {
+  if (!value) return null;
+  const raw = String(value).slice(0, 10);
+  const parsed = new Date(`${raw}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function compactDate(value: unknown) {
+  const parsed = parseDate(value);
+  if (!parsed) return 'Por confirmar';
+  return parsed.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })
+    .replace('.', '')
+    .toUpperCase();
+}
+
+function longDate(value: unknown) {
+  const parsed = parseDate(value);
+  if (!parsed) return 'Por confirmar';
+  return parsed.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+function timeText(value: unknown) {
+  const raw = String(value || '').trim();
+  return raw ? raw.slice(0, 5) : '';
+}
+
+function scheduleText(item: Record<string, unknown>) {
+  const start = timeText(item.start_time);
+  const end = timeText(item.end_time);
+  if (start && end) return `${start}–${end}`;
+  if (start) return start;
+  const schedule = String(item.schedule || '').trim();
+  const timeRange = schedule.match(/\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\b/);
+  return timeRange?.[0]?.replace(/\s+/g, '') || 'Por confirmar';
+}
+
+function pickupText(item: Record<string, unknown>) {
+  const explicit = String(item.pickup_time || item.estimated_pickup_time || '').trim();
+  return explicit ? explicit : 'Por confirmar';
+}
+
+function servicePeriod(items: Array<Record<string, unknown>>) {
+  const dated = items
+    .map(item => ({ raw: item.service_date, parsed: parseDate(item.service_date) }))
+    .filter(row => row.parsed)
+    .sort((a, b) => (a.parsed as Date).getTime() - (b.parsed as Date).getTime());
+  if (!dated.length) return { start: 'Por confirmar', end: 'Por confirmar' };
+  return { start: compactDate(dated[0].raw), end: compactDate(dated[dated.length - 1].raw) };
+}
+
 function modeExplanation(mode: string) {
   const lower = mode.toLowerCase();
   if (lower.includes('semi')) return 'Grupo reducido compartido, con una experiencia más personalizada.';
   if (lower.includes('private') || lower.includes('privado')) return 'Servicio dedicado exclusivamente al grupo de esta reserva.';
-  if (lower.includes('regular')) return 'Servicio compartido con otros pasajeros. Tarifa expresada por persona.';
+  if (lower.includes('regular')) return 'Servicio compartido con otros pasajeros.';
   if (lower.includes('fixed')) return 'Servicio dedicado con tarifa aplicada al servicio completo.';
   return 'Servicio configurado según las condiciones indicadas en esta propuesta.';
 }
@@ -76,133 +106,201 @@ type QuoteOptions = {
   depositPct?: number;
 };
 
-function drawContinuationHeader(doc: jsPDF, quoteCode: string) {
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text('LINK VENTAS', 18, 15);
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.3); doc.text('HOTEL EXPERIENCE', 18, 19.5);
-  doc.setTextColor(...MUTED); doc.setFontSize(6.3); doc.text(commercialQuoteCode(quoteCode), 192, 16.5, { align: 'right' });
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(18, 24, 192, 24);
+function drawBrandHeader(doc: jsPDF, quoteCode: string, pageLabel?: string) {
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.text('LINK VENTAS', 18, 16);
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.text('HOTEL EXPERIENCE', 18, 20.5);
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(pageLabel || 'COTIZACIÓN', 192, 16, { align: 'right' });
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.9); doc.text(commercialQuoteCode(quoteCode), 192, 20.5, { align: 'right' });
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(18, 27, 192, 27);
 }
 
-function ensureSpace(doc: jsPDF, quoteCode: string, y: number, needed = 18) {
-  if (y + needed <= 278) return y;
-  doc.addPage();
-  drawContinuationHeader(doc, quoteCode);
-  return 34;
+function drawSummaryCell(doc: jsPDF, x: number, y: number, label: string, value: string, width: number) {
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(5.2); doc.text(label.toUpperCase(), x, y);
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.7);
+  doc.text(doc.splitTextToSize(value, width), x, y + 5);
 }
 
-function drawDateCard(doc: jsPDF, x: number, y: number, label: string, value: unknown) {
-  const parts = dateParts(value);
+function rowHeight(doc: jsPDF, item: Record<string, unknown>) {
+  const title = cleanCommercialName(item.product_name).toUpperCase();
+  const lines = doc.splitTextToSize(title, 38);
+  return Math.max(13, 8 + lines.length * 3.2);
+}
+
+function drawServiceTable(doc: jsPDF, items: Array<Record<string, unknown>>, y: number) {
+  const left = 18;
+  const right = 192;
+  const columns = [
+    { key: 'date', label: 'FECHA', width: 20 },
+    { key: 'schedule', label: 'HORARIO', width: 24 },
+    { key: 'pickup', label: 'PICKUP EST.', width: 25 },
+    { key: 'service', label: 'EXPERIENCIA', width: 40 },
+    { key: 'mode', label: 'MODALIDAD', width: 21 },
+    { key: 'pax', label: 'PAX', width: 10 },
+    { key: 'unit', label: 'UNIT.', width: 17 },
+    { key: 'total', label: 'TOTAL', width: 17 },
+  ];
+
   doc.setFillColor(...PAPER); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
-  doc.roundedRect(x, y, 38, 27, 2.5, 2.5, 'FD');
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.text(label.toUpperCase(), x + 4, y + 5.5);
-  doc.setTextColor(...INK); doc.setFontSize(15); doc.text(parts.day, x + 4, y + 15.5);
-  doc.setFontSize(6.5); doc.text(parts.month, x + 18, y + 12.7);
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(...MUTED); doc.text(parts.year, x + 18, y + 17.3);
+  doc.rect(left, y, right - left, 9, 'FD');
+  let x = left;
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(4.8);
+  columns.forEach(column => {
+    const alignRight = column.key === 'unit' || column.key === 'total';
+    doc.text(column.label, alignRight ? x + column.width - 1.5 : x + 1.5, y + 5.8, alignRight ? { align: 'right' } : undefined);
+    x += column.width;
+  });
+  y += 9;
+
+  items.forEach((item, index) => {
+    const height = rowHeight(doc, item);
+    if (index % 2 === 1) { doc.setFillColor(252, 251, 249); doc.rect(left, y, right - left, height, 'F'); }
+    doc.setDrawColor(...LINE); doc.line(left, y + height, right, y + height);
+
+    const values = [
+      compactDate(item.service_date).replace(/\s\d{4}$/, ''),
+      scheduleText(item),
+      pickupText(item),
+      cleanCommercialName(item.product_name).toUpperCase(),
+      humanModality(String(item.modality || item.catalog_price_mode || '')),
+      String(Math.max(1, Number(item.pax || 1))),
+      money(item.unit_price),
+      money(item.total_price),
+    ];
+
+    x = left;
+    values.forEach((value, cellIndex) => {
+      const column = columns[cellIndex];
+      const isPrice = cellIndex >= 6;
+      const isService = cellIndex === 3;
+      doc.setTextColor(...INK);
+      doc.setFont('helvetica', isService || isPrice ? 'bold' : 'normal');
+      doc.setFontSize(isService ? 5.6 : isPrice ? 5.4 : 5.2);
+      if (isService) {
+        doc.text(doc.splitTextToSize(value, column.width - 3), x + 1.5, y + 5.2);
+      } else if (isPrice) {
+        doc.text(value, x + column.width - 1.5, y + 5.5, { align: 'right' });
+      } else {
+        doc.text(doc.splitTextToSize(value, column.width - 3), x + 1.5, y + 5.2);
+      }
+      x += column.width;
+    });
+    y += height;
+  });
+
+  return y;
+}
+
+function drawDetailPage(doc: jsPDF, quote: SalesQuoteSnapshot, items: Array<Record<string, unknown>>) {
+  doc.addPage();
+  drawBrandHeader(doc, quote.quote_code, 'DETALLE DE EXPERIENCIAS');
+  let y = 38;
+
+  items.forEach((item, index) => {
+    const title = cleanCommercialName(item.product_name).toUpperCase();
+    const description = String(item.description || '').trim() || modeExplanation(String(item.modality || item.catalog_price_mode || ''));
+    const mode = humanModality(String(item.modality || item.catalog_price_mode || ''));
+    const itemPax = Math.max(1, Number(item.pax || 1));
+    const body = doc.splitTextToSize(description, 135);
+    const needed = Math.max(32, 25 + body.length * 3.5);
+
+    if (y + needed > 262) {
+      doc.addPage(); drawBrandHeader(doc, quote.quote_code, 'DETALLE DE EXPERIENCIAS'); y = 38;
+    }
+
+    doc.setFillColor(...PAPER); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+    doc.roundedRect(18, y, 174, needed, 3, 3, 'FD');
+    doc.setTextColor(...ACCENT); doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.text(String(index + 1).padStart(2, '0'), 24, y + 8);
+    doc.setTextColor(...INK); doc.setFontSize(10.5); doc.text(doc.splitTextToSize(title, 112), 36, y + 8);
+    doc.setFontSize(10); doc.text(money(item.total_price), 186, y + 8, { align: 'right' });
+    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4);
+    doc.text(`${longDate(item.service_date)} · ${scheduleText(item)} · ${mode} · ${itemPax} pax`, 36, y + 16);
+    doc.setFontSize(6.6); doc.text(body, 36, y + 23);
+    y += needed + 7;
+  });
+
+  if (y > 220) { doc.addPage(); drawBrandHeader(doc, quote.quote_code, 'CONDICIONES'); y = 38; }
+  else y += 5;
+
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('CONDICIONES PRINCIPALES', 18, y); y += 7;
+  concisePolicy(quote.policy_summary).slice(0, 3).forEach(line => {
+    doc.setFillColor(...ACCENT); doc.circle(19.5, y - 1.1, 0.75, 'F');
+    doc.setTextColor(...INK); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.6); doc.text(line, 23, y); y += 5;
+  });
+  doc.setTextColor(...MUTED); doc.setFontSize(5.9);
+  doc.text('* Descontando entradas, permisos o servicios de terceros ya emitidos y no reembolsables.', 18, y + 1); y += 7;
+  doc.text('Las condiciones completas aplicables a la reserva prevalecen sobre este resumen.', 18, y);
 }
 
 export function buildCustomerQuotePdf(quote: SalesQuoteSnapshot, options?: QuoteOptions) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  const right = 192;
   const left = 18;
-  const width = right - left;
+  const right = 192;
   const lead = (quote.snapshot?.lead || {}) as Record<string, unknown>;
-  const items = (quote.snapshot?.items || []) as Array<Record<string, unknown>>;
-  const reference = String(lead.reference || lead.code || '');
-  const client = String(options?.clientName || '').trim() || 'Tu viaje';
-  const destination = options?.destination || 'San Pedro de Atacama';
-  const hotel = options?.hotelName || 'Hotel / alojamiento por definir';
+  const items = ((quote.snapshot?.items || []) as Array<Record<string, unknown>>)
+    .slice()
+    .sort((a, b) => `${String(a.service_date || '')}|${String(a.start_time || '')}`.localeCompare(`${String(b.service_date || '')}|${String(b.start_time || '')}`));
+  const reference = String(lead.reference || lead.code || '').trim();
+  const client = String(options?.clientName || '').trim() || 'Pasajero por confirmar';
+  const hotel = String(options?.hotelName || '').trim() || 'Por confirmar';
   const pax = Math.max(1, Number(lead.pax || 1));
-  let y = 18;
+  const period = servicePeriod(items);
 
-  // Brand + discreet document identity.
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('LINK VENTAS', left, y);
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.text('HOTEL EXPERIENCE', left, y + 5);
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text('COTIZACIÓN', right, y, { align: 'right' });
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.text(commercialQuoteCode(quote.quote_code), right, y + 5, { align: 'right' });
-  y += 15;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.35); doc.line(left, y, right, y); y += 13;
+  drawBrandHeader(doc, quote.quote_code);
+  let y = 40;
 
-  // Travel-first hero.
-  doc.setTextColor(...ACCENT); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.4); doc.text('PROPUESTA PARA', left, y);
+  doc.setTextColor(...ACCENT); doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.text('PROPUESTA PARA', left, y);
   y += 7;
-  doc.setTextColor(...INK); doc.setFontSize(18); doc.text(doc.splitTextToSize(client, 130), left, y);
-  y += 8;
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.2);
-  doc.text(`Esta es tu propuesta de experiencias para ${destination}.`, left, y); y += 10;
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+  doc.text(doc.splitTextToSize(client, 130), left, y);
+  y += 10;
 
-  drawDateCard(doc, left, y, 'Llegada', lead.checkin);
-  drawDateCard(doc, left + 44, y, 'Salida', lead.checkout);
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.text('VIAJEROS', left + 94, y + 5.5);
-  doc.setTextColor(...INK); doc.setFontSize(10.5); doc.text(`${pax} ${pax === 1 ? 'pasajero' : 'pasajeros'}`, left + 94, y + 12);
-  doc.setTextColor(...MUTED); doc.setFontSize(5.8); doc.text('HOTEL / ORIGEN', left + 94, y + 19);
-  doc.setTextColor(...INK); doc.setFontSize(8.2); doc.text(doc.splitTextToSize(hotel, 77), left + 94, y + 24.5);
-  y += 34;
+  doc.setFillColor(...PAPER); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+  doc.roundedRect(left, y, right - left, 29, 3, 3, 'FD');
+  drawSummaryCell(doc, left + 6, y + 7, 'Inicio servicios', period.start, 35);
+  drawSummaryCell(doc, left + 49, y + 7, 'Término servicios', period.end, 35);
+  drawSummaryCell(doc, left + 92, y + 7, 'Pasajeros', `${pax} ${pax === 1 ? 'pasajero' : 'pasajeros'}`, 25);
+  drawSummaryCell(doc, left + 125, y + 7, 'Hotel / origen', hotel, 43);
+  y += 36;
+
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('SERVICIOS COTIZADOS', left, y);
   if (reference) {
-    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.text(`Referencia de reserva: ${reference}`, left, y);
-    y += 10;
+    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.7); doc.text(`Ref. ${reference}`, right, y, { align: 'right' });
   }
+  y += 7;
 
-  // Experiences.
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text('EXPERIENCIAS SELECCIONADAS', left, y); y += 8;
+  y = drawServiceTable(doc, items, y);
+  y += 8;
 
-  items.forEach((item, index) => {
-    const description = String(item.description || '').trim();
-    const mode = humanModality(String(item.modality || item.catalog_price_mode || ''));
-    const explanation = modeExplanation(String(item.modality || item.catalog_price_mode || ''));
-    const title = cleanCommercialName(item.product_name);
-    const itemPax = Math.max(1, Number(item.pax || 1));
-    const detail = `${date(item.service_date)} · ${mode} · ${itemPax} ${itemPax === 1 ? 'pasajero' : 'pasajeros'}`;
-    const bodyLines = doc.splitTextToSize(description || explanation, 128);
-    const cardHeight = Math.max(35, 27 + bodyLines.length * 3.5);
-    y = ensureSpace(doc, quote.quote_code, y, cardHeight + 8);
-
-    doc.setFillColor(...PAPER); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
-    doc.roundedRect(left, y, width, cardHeight, 3, 3, 'FD');
-
-    doc.setTextColor(...ACCENT); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.text(String(index + 1).padStart(2, '0'), left + 6, y + 8);
-    doc.setTextColor(...INK); doc.setFontSize(11.2); doc.text(doc.splitTextToSize(title.toUpperCase(), 118), left + 18, y + 8);
-    doc.setTextColor(...INK); doc.setFontSize(10.5); doc.text(money(item.total_price), right - 6, y + 8, { align: 'right' });
-    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.text(detail, left + 18, y + 16);
-    doc.setFontSize(6.7); doc.text(bodyLines, left + 18, y + 23);
-    y += cardHeight + 7;
-  });
-
-  // Commercial total.
-  y = ensureSpace(doc, quote.quote_code, y, options?.depositPct ? 48 : 34);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.line(left, y, right, y); y += 9;
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.text('TOTAL DE LA EXPERIENCIA', left, y);
-  doc.setTextColor(...INK); doc.setFontSize(23); doc.text(money(quote.total), right, y + 3, { align: 'right' });
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4); doc.text('CLP · valor total de los servicios seleccionados', right, y + 9, { align: 'right' });
+  const totalPerPax = pax > 0 ? Number(quote.total || 0) / pax : Number(quote.total || 0);
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.text(`TOTAL / PAX (${pax})`, left, y);
+  doc.setTextColor(...INK); doc.setFontSize(8.5); doc.text(money(totalPerPax), left + 53, y);
+  doc.setTextColor(...MUTED); doc.setFontSize(6); doc.text('TOTAL DE LA EXPERIENCIA', right - 66, y);
+  doc.setTextColor(...INK); doc.setFontSize(18); doc.text(money(quote.total), right, y + 2, { align: 'right' });
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.text('CLP', right, y + 8, { align: 'right' });
   y += 17;
 
   const depositPct = Number(options?.depositPct || 0);
   if (depositPct > 0 && depositPct < 100) {
     const deposit = Number(quote.total || 0) * (depositPct / 100);
     const balance = Number(quote.total || 0) - deposit;
-    doc.setFillColor(...PAPER); doc.roundedRect(left, y, width, 18, 2.5, 2.5, 'F');
-    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.text(`Reserva ${depositPct}%`, left + 6, y + 7);
-    doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.text(money(deposit), left + 58, y + 7, { align: 'right' });
-    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.text('Saldo restante', left + 96, y + 7);
-    doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.text(money(balance), right - 6, y + 7, { align: 'right' });
-    y += 25;
+    doc.setFillColor(...PAPER); doc.roundedRect(left, y, right - left, 16, 2.5, 2.5, 'F');
+    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.text(`Reserva ${depositPct}%`, left + 6, y + 6.5);
+    doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.text(money(deposit), left + 61, y + 6.5, { align: 'right' });
+    doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.text('Saldo restante', left + 102, y + 6.5);
+    doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.text(money(balance), right - 6, y + 6.5, { align: 'right' });
+    y += 22;
   }
 
-  // Short policy summary, not a contract block.
-  y = ensureSpace(doc, quote.quote_code, y, 43);
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('CONDICIONES PRINCIPALES', left, y); y += 7;
-  const policy = concisePolicy(quote.policy_summary);
-  policy.slice(0, 3).forEach(line => {
-    doc.setFillColor(...ACCENT); doc.circle(left + 1.5, y - 1.1, 0.8, 'F');
-    doc.setTextColor(...INK); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.text(line, left + 5, y); y += 5;
-  });
-  doc.setTextColor(...MUTED); doc.setFontSize(6.1);
-  doc.text('* Descontando entradas, permisos o servicios de terceros ya emitidos y no reembolsables.', left, y + 1); y += 6;
-  if (policy[3]) { doc.text(doc.splitTextToSize(policy[3], 170), left, y); y += 5; }
-  doc.setFontSize(5.9); doc.text('Las condiciones completas aplicables a la reserva prevalecen sobre este resumen.', left, y); y += 10;
+  doc.setFillColor(251, 250, 247); doc.setDrawColor(...LINE); doc.roundedRect(left, y, right - left, 16, 2, 2, 'FD');
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.1);
+  doc.text(doc.splitTextToSize('Los horarios marcados como “Por confirmar” se actualizarán cuando la coordinación del servicio quede definida.', 162), left + 6, y + 6.5);
 
-  doc.setDrawColor(...LINE); doc.line(left, y, right, y); y += 7;
-  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.text('LINK · HOTEL EXPERIENCE', left, y);
-  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.text('Cotización comercial · valores expresados en pesos chilenos', right, y, { align: 'right' });
+  doc.setDrawColor(...LINE); doc.line(left, 276, right, 276);
+  doc.setTextColor(...INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.text('LINK · HOTEL EXPERIENCE', left, 282);
+  doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal'); doc.setFontSize(5.2); doc.text('Cotización comercial · valores expresados en pesos chilenos', right, 282, { align: 'right' });
+
+  drawDetailPage(doc, quote, items);
 
   const fileName = `${quote.quote_code}.pdf`;
   return { doc, fileName };
@@ -224,7 +322,12 @@ export async function shareCustomerQuote(quote: SalesQuoteSnapshot, options?: Qu
     return 'shared' as const;
   }
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName;
-  document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   return 'downloaded' as const;
 }
