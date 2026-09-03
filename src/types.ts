@@ -115,6 +115,13 @@ export type Lead = {
   hotel_partners?: { name?: string | null; lead_prefix?: string | null } | null;
 };
 
+export type LeadServicePassengerLink = {
+  passenger_id: string;
+  position?: number | null;
+  confirmed?: boolean | null;
+  passengers?: { passenger_code?: string | null } | null;
+};
+
 export type LeadService = {
   id: string;
   lead_id: string;
@@ -149,10 +156,13 @@ export type LeadService = {
   tax_rate_snapshot?: number | null;
   created_at: string;
   leads?: { codigo?: string | null; reserva?: string | null } | null;
+  lead_service_passengers?: LeadServicePassengerLink[] | null;
 };
 
 export type PassengerDraft = {
   full_name: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   phone: string;
   nationality: string;
@@ -160,6 +170,8 @@ export type PassengerDraft = {
   document_number: string;
   birth_date: string;
   dietary_restrictions: string;
+  gender?: string;
+  disability_type?: string;
   medical_notes?: string;
   is_primary: boolean;
 };
@@ -180,6 +192,7 @@ export type ServiceDraft = {
   hotel_commission_pct: number;
   seller_commission_pct: number;
   notes: string;
+  passenger_indexes?: number[];
 };
 
 export type PaymentMovement = {
