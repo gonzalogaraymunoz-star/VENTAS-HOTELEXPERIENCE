@@ -81,6 +81,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   function openPayments(leadId = '') { setPaymentLeadId(leadId); go('payments'); }
   const operationsUrl = import.meta.env.VITE_OPERATIONS_URL as string | undefined;
   const confirmedServices = data.services.filter(service => ['confirmed', 'completed'].includes(String(service.booking_status)));
+  const salesFormKey = editLeadId ? `lead:${editLeadId}` : initialProductId ? `product:${initialProductId}` : 'new-sale';
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
@@ -106,7 +107,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
         {error && <div className="error-box page-error">{error}</div>}
         {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
-          {screen === 'new-sale' && <SalesFlowForm profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId(''); go('leads'); }}/>} 
+          {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId(''); go('leads'); }}/>} 
           {screen === 'catalog' && <VisualCatalog products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
