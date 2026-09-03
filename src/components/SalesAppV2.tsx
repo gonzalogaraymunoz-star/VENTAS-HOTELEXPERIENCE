@@ -52,6 +52,19 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 
   useEffect(() => { void refresh(); }, []);
 
+  useEffect(() => {
+    const openPending = (event: Event) => {
+      const detail = (event as CustomEvent<{ leadId?: string }>).detail;
+      if (!detail?.leadId) return;
+      setEditLeadId(detail.leadId);
+      setInitialProductId('');
+      setScreen('new-sale');
+      setMobileOpen(false);
+    };
+    window.addEventListener('link:open-pending-task', openPending as EventListener);
+    return () => window.removeEventListener('link:open-pending-task', openPending as EventListener);
+  }, []);
+
   const nav: { id: Screen; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'new-sale', label: 'Cotización e ingreso', icon: ShoppingBag },
