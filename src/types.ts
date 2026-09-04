@@ -57,6 +57,8 @@ export type Product = {
   origin?: string | null;
   duration_hours?: number | null;
   schedule?: string | null;
+  stops?: string | null;
+  snack?: string | null;
   description?: string | null;
   product_slug?: string | null;
   price_mode: string;
@@ -97,6 +99,9 @@ export type Lead = {
   quote_accepted_at?: string | null;
   payment_link?: string | null;
   payment_link_sent_at?: string | null;
+  payment_coordination_status?: string | null;
+  payment_coordination_at?: string | null;
+  payment_coordination_note?: string | null;
   arrival_flight_number?: string | null;
   departure_flight_number?: string | null;
   pickup_location?: string | null;
