@@ -12,6 +12,7 @@ import {
   sharePaymentLink, updateSalesFlow,
 } from '../lib/salesFlow';
 import { concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib/customerQuote';
+import { downloadCustomerItinerary } from '../lib/customerItinerary';
 import type {
   HotelPartner, Lead, LeadService, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
   SellerProfile, ServiceDraft, Supplier,
@@ -443,6 +444,18 @@ export default function SalesFlowForm({
     });
   }
 
+  function downloadItineraryPdf() {
+    const servicesForPdf = draftServices.map(service => {
+      const product = products.find(item => item.id === service.product_id);
+      return { ...service, durationHours: product?.duration_hours, scheduleLabel: product?.schedule };
+    });
+    const fileName = downloadCustomerItinerary({
+      reference, leadCode, hotelName: hotel?.name, pickupLocation, arrivalFlight, departureFlight,
+      passengers, services: servicesForPdf,
+    });
+    setMessage(`${fileName} descargado. Descargar el PDF no registra el itinerario como enviado.`);
+  }
+
   async function sendItinerary() {
     const primaryEmail = passengers[0]?.email || '';
     setBusy(true); setMessage('');
@@ -560,7 +573,7 @@ export default function SalesFlowForm({
         const selected = new Set(service.passenger_indexes || []);
         return <article key={`${service.product_id || 'manual'}-${index}`}>
           <header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header>
-          <div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div>
+          <div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="form-grid three"><label>Hora inicio <span>para itinerario</span><input type="time" value={service.start_time} onChange={event => patchService(index, { start_time: event.target.value })}/></label><label>Horario referencial<input readOnly value={product?.schedule || "Según coordinación"}/></label><label>Duración referencial<input readOnly value={product?.duration_hours ? `${product.duration_hours} h` : "Por confirmar"}/></label></div>
           <div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div>
           <div className="service-client-info"><label>Información para el cliente<textarea value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Descripción del lugar, recorrido, recomendaciones y condiciones particulares…"/></label>{product && <button type="button" className="button ghost" onClick={() => patchService(index, { notes: productClientInfo(product) })}>Rellenar desde catálogo</button>}</div>
           <div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div>
@@ -585,9 +598,9 @@ export default function SalesFlowForm({
     </section>}
 
     {activeStep === 4 && <section className="flow-card">
-      <FlowTitle number="05" title="Confirmación e itinerario al pasajero" text="El itinerario se construye con los mismos productos, fechas, modalidad y datos ya ingresados. No se vuelve a escribir la reserva."/>
+      <FlowTitle number="05" title="Confirmación e itinerario al pasajero" text="El itinerario se construye con los mismos productos, fechas, modalidad y datos ya ingresados. Puedes descargarlo en PDF o enviarlo sin volver a escribir la reserva."/>
       <div className="itinerary-preview"><header><div><Mail size={18}/><span><strong>{reference || leadCode}</strong><small>{passengers[0]?.email || 'Email principal pendiente'}</small></span></div></header><pre>{itineraryBody()}</pre></div>
-      <div className="flow-bottom-actions"><button className="button dark big" disabled={busy || !passengers[0]?.email} onClick={() => void sendItinerary()}><Mail size={16}/> Enviar itinerario por email</button><button className="button ghost big" disabled={busy} onClick={() => void markItineraryExternal()}>Registrar envío externo</button></div>
+      <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy || !draftServices.length} onClick={downloadItineraryPdf}><Download size={16}/> Descargar itinerario PDF</button><button className="button dark big" disabled={busy || !passengers[0]?.email} onClick={() => void sendItinerary()}><Mail size={16}/> Enviar itinerario por email</button><button className="button ghost big" disabled={busy} onClick={() => void markItineraryExternal()}>Registrar envío externo</button></div>
     </section>}
 
     {activeStep === 5 && <section className="flow-card final-flow-card">
