@@ -19,6 +19,7 @@ import type {
 import { ProductWorkspace } from './SalesWorkspaces';
 import './SalesFlowForm.css';
 import './SalesFlowOperational.css';
+import './SalesQuotePaymentPatch.css';
 
 const channels = ['Recepción', 'QR Hotel', 'Base de datos hotel', 'Web', 'Campaña', 'Email', 'Vendedor', 'Venta directa', 'Otro'];
 const steps = [
@@ -84,10 +85,35 @@ function tierSummary(product: Product | undefined, pax: number, unitPrice: numbe
   return `Tarifa aplicada · ${clp(unitPrice)}`;
 }
 
+function productClientInfo(product?: Product) {
+  if (!product) return '';
+  const parts: string[] = [];
+  const description = String(product.description || '').trim();
+  const stops = String(product.stops || '').trim();
+  const schedule = String(product.schedule || '').trim();
+  const snack = String(product.snack || '').trim();
+  const duration = Number(product.duration_hours || 0);
+  if (description) parts.push(description.replace(/\s+/g, ' '));
+  if (stops) parts.push(`Recorrido: ${stops.replace(/\s*\+\s*/g, ', ')}.`);
+  if (duration > 0) parts.push(`Duración aproximada: ${duration % 1 === 0 ? duration.toFixed(0) : duration.toFixed(1)} h.`);
+  if (schedule) parts.push(`Horario referencial: ${schedule}.`);
+  if (snack) parts.push(`Alimentación referencial: ${snack}.`);
+  const category = `${product.category || ''} ${product.name || ''}`.toLowerCase();
+  if (/transfer|traslado|transporte/.test(category)) {
+    parts.push('Recomendación: confirmar con anticipación el horario, punto de recogida y datos de vuelo cuando corresponda.');
+  } else if (/wellness|spa|masaje|terapia/.test(category)) {
+    parts.push('Recomendación: informar previamente restricciones, alergias o condiciones relevantes para adaptar el servicio.');
+  } else {
+    parts.push('Recomendación: llevar agua, protección solar, abrigo y calzado cómodo. El horario y punto de encuentro definitivos se confirman antes del servicio.');
+  }
+  return parts.join(' ');
+}
+
 function stageToStep(stage?: string | null) {
   if (stage === 'completed') return 5;
   if (stage === 'ready_to_complete' || stage === 'itinerary_sent') return 5;
-  if (stage === 'accepted_payment' || stage === 'payment_link_sent') return 3;
+  if (stage === 'payment_link_sent' || stage === 'payment_coordinated') return 4;
+  if (stage === 'accepted_payment') return 3;
   if (stage === 'quote_sent' || stage === 'quote_ready') return 2;
   if (stage === 'data_capture') return 1;
   return 0;
@@ -135,6 +161,7 @@ export default function SalesFlowForm({
   const [pickupLocation, setPickupLocation] = useState(existingLead?.pickup_location || '');
   const [hotelRoom, setHotelRoom] = useState(existingLead?.hotel_room || '');
   const [paymentLink, setPaymentLink] = useState(existingLead?.payment_link || '');
+  const [paymentCoordination, setPaymentCoordination] = useState(existingLead?.payment_coordination_status || (existingLead?.payment_link_sent_at ? 'link_sent' : 'pending'));
   const [passengers, setPassengers] = useState<PassengerDraft[]>(() => Array.from({ length: Math.max(1, Number(existingLead?.numero_pax || 1)) }, (_, index) => blankPassenger(index === 0)));
   const [draftServices, setDraftServices] = useState<ServiceDraft[]>(
     initialLeadId ? services.filter(service => service.lead_id === initialLeadId && service.booking_status === 'quoted').map(serviceToDraft) : [],
@@ -154,6 +181,7 @@ export default function SalesFlowForm({
   const quoteAccepted = quote?.status === 'accepted' || Boolean(currentLead?.quote_accepted_at);
   const quoteSent = ['sent', 'accepted'].includes(String(quote?.status || '')) || Boolean(currentLead?.quote_sent_at);
   const paymentSent = Boolean(currentLead?.payment_link_sent_at);
+  const paymentReady = paymentSent || paymentCoordination === 'link_sent' || paymentCoordination === 'external_or_later';
   const itinerarySent = Boolean(currentLead?.itinerary_sent_at);
 
   useEffect(() => {
@@ -222,8 +250,8 @@ export default function SalesFlowForm({
     setDraftServices(current => [...current, {
       product_id: product.id, product_code: product.code, product_name: product.name, category: product.category,
       date: '', start_time: '', pax: paxCount, modality: product.price_mode, unit_price: known ?? 0,
-      operator_cost: 0, supplier_id: '', supplier_name: '', hotel_commission_pct: 0, seller_commission_pct: 0, notes: '',
-      passenger_indexes: allPassengerIndexes(),
+      operator_cost: 0, supplier_id: '', supplier_name: '', hotel_commission_pct: 0, seller_commission_pct: 0,
+      notes: productClientInfo(product), passenger_indexes: allPassengerIndexes(),
     }]);
     setCatalogOpen(false);
   }
@@ -243,6 +271,7 @@ export default function SalesFlowForm({
   function patchPassenger(index: number, patch: Partial<PassengerDraft>) {
     setPassengers(current => current.map((passenger, row) => row === index ? { ...passenger, ...patch } : passenger));
   }
+
   function patchPassengerName(index: number, field: 'first_name' | 'last_name', value: string) {
     setPassengers(current => current.map((passenger, row) => {
       if (row !== index) return passenger;
@@ -251,9 +280,11 @@ export default function SalesFlowForm({
       return { ...next, full_name: composed || passenger.full_name };
     }));
   }
+
   function patchService(index: number, patch: Partial<ServiceDraft>) {
     setDraftServices(current => current.map((service, row) => row === index ? { ...service, ...patch } : service));
   }
+
   function toggleServicePassenger(serviceIndex: number, passengerIndex: number) {
     setDraftServices(current => current.map((service, row) => {
       if (row !== serviceIndex) return service;
@@ -276,6 +307,7 @@ export default function SalesFlowForm({
       reservation_reference: reference,
       sales_stage: stage || currentLead?.sales_stage || 'data_capture',
       payment_link: paymentLink,
+      payment_coordination_status: paymentCoordination,
       arrival_flight_number: arrivalFlight,
       departure_flight_number: departureFlight,
       pickup_location: pickupLocation,
@@ -371,12 +403,32 @@ export default function SalesFlowForm({
     try {
       const id = await persist('accepted_payment', true);
       const result = await sharePaymentLink(reference, paymentLink);
-      await updateSalesFlow(id, { ...metadata('payment_link_sent'), mark_payment_link_sent: true });
+      await updateSalesFlow(id, { ...metadata('payment_link_sent'), payment_coordination_status: 'link_sent', mark_payment_link_sent: true });
+      setPaymentCoordination('link_sent');
+      setActiveStep(4);
       setMessage(result === 'shared' ? 'Link de pago compartido y registrado.' : 'Link copiado y registrado como entregado.');
       await onSaved();
     } catch (error: any) {
       if (error?.name !== 'AbortError') setMessage(error?.message || 'No se pudo compartir el link de pago.');
     } finally { setBusy(false); }
+  }
+
+  async function continueWithoutPaymentLink() {
+    setBusy(true); setMessage('');
+    try {
+      const id = await persist('accepted_payment', true);
+      await updateSalesFlow(id, {
+        ...metadata('payment_coordinated'),
+        sales_stage: 'payment_coordinated',
+        payment_coordination_status: 'external_or_later',
+        payment_coordination_note: 'Pago coordinado sin link desde LINK Ventas',
+      });
+      setPaymentCoordination('external_or_later');
+      setActiveStep(4);
+      setMessage('Pago coordinado sin link. Puedes preparar el itinerario; no se registró ningún link como enviado.');
+      await onSaved();
+    } catch (error: any) { setMessage(error?.message || 'No se pudo continuar sin link de pago.'); }
+    finally { setBusy(false); }
   }
 
   function itineraryBody() {
@@ -395,7 +447,7 @@ export default function SalesFlowForm({
     const primaryEmail = passengers[0]?.email || '';
     setBusy(true); setMessage('');
     try {
-      const id = await persist('payment_link_sent', true);
+      const id = await persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : 'payment_coordinated', true);
       await sendItineraryEmail({
         operationsUrl: operationsUrl || '', to: primaryEmail,
         subject: `Itinerario confirmado · ${reference || leadCode}`,
@@ -411,7 +463,7 @@ export default function SalesFlowForm({
     if (!leadId) return;
     setBusy(true); setMessage('');
     try {
-      await persist('payment_link_sent', true);
+      await persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : 'payment_coordinated', true);
       await updateSalesFlow(leadId, { ...metadata('ready_to_complete'), mark_itinerary_sent: true, itinerary_sent_via: 'externo' });
       setActiveStep(5); setMessage('Envío externo del itinerario registrado.'); await onSaved();
     } catch (error: any) { setMessage(error?.message || 'No se pudo registrar el envío.'); }
@@ -421,7 +473,7 @@ export default function SalesFlowForm({
   const finalMissing = useMemo(() => {
     const missing: string[] = [];
     if (!quoteAccepted) missing.push('aceptación de cotización');
-    if (!paymentSent) missing.push('link de pago enviado');
+    if (!paymentReady) missing.push('forma de pago definida');
     if (!itinerarySent) missing.push('itinerario enviado');
     if (!checkin) missing.push('arribo');
     if (!checkout) missing.push('salida');
@@ -435,7 +487,7 @@ export default function SalesFlowForm({
       if (!service.passenger_indexes?.length) missing.push(`pasajeros ${service.product_name || index + 1}`);
     });
     return Array.from(new Set(missing));
-  }, [quoteAccepted, paymentSent, itinerarySent, checkin, checkout, contact, passengers, draftServices]);
+  }, [quoteAccepted, paymentReady, itinerarySent, checkin, checkout, contact, passengers, draftServices]);
 
   async function completeReservation() {
     if (finalMissing.length) return;
@@ -460,7 +512,7 @@ export default function SalesFlowForm({
   }
 
   const total = draftServices.reduce((sum, service) => sum + Number(service.unit_price || 0) * Math.max(1, Number(service.pax || 1)), 0);
-  const stageUnlocked = (index: number) => index <= 1 || (index === 2 && Boolean(leadId)) || (index === 3 && quoteAccepted) || (index === 4 && quoteAccepted && paymentSent) || (index === 5 && itinerarySent);
+  const stageUnlocked = (index: number) => index <= 1 || (index === 2 && Boolean(leadId)) || (index === 3 && quoteAccepted) || (index === 4 && quoteAccepted && paymentReady) || (index === 5 && itinerarySent);
 
   return <div className="sales-flow">
     <section className="sales-flow-head">
@@ -469,7 +521,7 @@ export default function SalesFlowForm({
     </section>
 
     <nav className="sales-stepper" aria-label="Proceso comercial">
-      {steps.map(([number, label], index) => <button key={number} className={`${activeStep === index ? 'active ' : ''}${stageUnlocked(index) ? '' : 'locked'}`} disabled={!stageUnlocked(index)} onClick={() => setActiveStep(index)}><span>{number}</span><strong>{label}</strong>{index < activeStep || (index === 2 && quoteSent) || (index === 3 && paymentSent) || (index === 4 && itinerarySent) ? <Check size={14}/> : null}</button>)}
+      {steps.map(([number, label], index) => <button key={number} className={`${activeStep === index ? 'active ' : ''}${stageUnlocked(index) ? '' : 'locked'}`} disabled={!stageUnlocked(index)} onClick={() => setActiveStep(index)}><span>{number}</span><strong>{label}</strong>{index < activeStep || (index === 2 && quoteSent) || (index === 3 && paymentReady) || (index === 4 && itinerarySent) ? <Check size={14}/> : null}</button>)}
     </nav>
 
     {message && <div className={/no se|falta|error/i.test(message) ? 'error-box' : 'success-box'}>{message}</div>}
@@ -506,20 +558,30 @@ export default function SalesFlowForm({
         const product = products.find(item => item.id === service.product_id);
         const calc = economics(service.unit_price, service.pax, service.operator_cost, 0, 0);
         const selected = new Set(service.passenger_indexes || []);
-        return <article key={`${service.product_id || 'manual'}-${index}`}><header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header><div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div><label>Información para el cliente<input value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Horario, punto de encuentro, condiciones particulares…"/></label><div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div></article>;
+        return <article key={`${service.product_id || 'manual'}-${index}`}>
+          <header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header>
+          <div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div>
+          <div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div>
+          <div className="service-client-info"><label>Información para el cliente<textarea value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Descripción del lugar, recorrido, recomendaciones y condiciones particulares…"/></label>{product && <button type="button" className="button ghost" onClick={() => patchService(index, { notes: productClientInfo(product) })}>Rellenar desde catálogo</button>}</div>
+          <div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div>
+        </article>;
       })}</div>}
       {quote && <section className="quote-document-status"><div><FileText size={20}/><span><strong>{quote.quote_code}</strong><small>Versión {quote.version} · {quote.status}</small></span></div><div className="quote-policy-mini"><strong>Cancelación — resumen de la política vigente</strong>{concisePolicy(quote.policy_summary).slice(0, 5).map(item => <span key={item}>• {item}</span>)}</div><div className="top-actions"><button className="button ghost" onClick={() => downloadCustomerQuote(quote, { hotelName: hotel?.name, clientName: passengers[0]?.full_name || reference })}><Download size={15}/> PDF</button><button className="button dark" disabled={busy} onClick={() => void shareQuote()}><Send size={15}/> Compartir</button>{!quoteSent && <button className="button ghost" disabled={busy} onClick={() => void markSent()}>Registrar enviada</button>}</div></section>}
       <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={() => void persist('data_capture')}>Guardar productos</button><button className="button dark big" disabled={busy || !draftServices.length} onClick={() => void generateQuote()}>{quote ? 'Crear nueva versión' : 'Crear carta cotización'} <FileText size={16}/></button>{quoteSent && !quoteAccepted && <button className="button dark big" disabled={busy} onClick={() => void acceptQuote()}><CheckCircle2 size={16}/> Cliente acepta</button>}</div>
     </section>}
 
     {activeStep === 3 && <section className="flow-card">
-      <FlowTitle number="04" title="Aceptación, pago y datos finales" text="Una vez aceptada la cotización, se envía el link de pago y se completa la información que alimentará la reserva y las listas operativas."/>
-      <section className="payment-link-card"><div><strong>Link de pago</strong><span>Se guarda en el mismo ingreso; compartirlo no crea otra reserva.</span></div><div className="payment-link-row"><input value={paymentLink} onChange={event => setPaymentLink(event.target.value)} placeholder="https://…"/><button className="button dark" disabled={busy || !paymentLink.trim()} onClick={() => void sendPayment()}><Send size={15}/> Compartir link</button><button className="button ghost" disabled={!paymentLink.trim()} onClick={() => navigator.clipboard.writeText(paymentLink)}><Copy size={15}/></button></div></section>
+      <FlowTitle number="04" title="Aceptación, pago y datos finales" text="Una vez aceptada la cotización, define cómo se coordinará el pago y completa la información que alimentará la reserva y las listas operativas."/>
+      <section className="payment-link-card">
+        <div><strong>Link de pago <span>· opcional</span></strong><span>Pega la URL real que abre el cobro de esta reserva. No uses la página general del proveedor. Si el pago será por transferencia, efectivo o se coordinará después, puedes continuar sin link.</span></div>
+        <div className="payment-link-row"><input value={paymentLink} onChange={event => setPaymentLink(event.target.value)} placeholder="https://… enlace real de cobro"/><button className="button dark" disabled={busy || !paymentLink.trim()} onClick={() => void sendPayment()}><Send size={15}/> Compartir link</button><button className="button ghost" disabled={!paymentLink.trim()} onClick={() => navigator.clipboard.writeText(paymentLink)}><Copy size={15}/></button><button className="button ghost" disabled={busy} onClick={() => void continueWithoutPaymentLink()}>Continuar sin link</button></div>
+        {paymentReady && <small className="payment-ready-note">{paymentCoordination === 'link_sent' || paymentSent ? 'Link de pago registrado como compartido.' : 'Pago coordinado sin link; no se registró un envío inexistente.'}</small>}
+      </section>
       <div className="form-grid four"><label>Vuelo llegada <span>si aplica</span><input value={arrivalFlight} onChange={event => setArrivalFlight(event.target.value)} placeholder="JA 123"/></label><label>Vuelo salida <span>si aplica</span><input value={departureFlight} onChange={event => setDepartureFlight(event.target.value)} placeholder="LA 456"/></label><label>Punto de recogida<input value={pickupLocation} onChange={event => setPickupLocation(event.target.value)} placeholder="Hotel / aeropuerto / dirección"/></label><label>Habitación <span>si aplica</span><input value={hotelRoom} onChange={event => setHotelRoom(event.target.value)}/></label></div>
       <div className="operational-note"><strong>Datos para parques y manifiestos</strong><span>Género, discapacidad y observaciones se guardan solo cuando son declarados. No se infieren.</span></div>
       <div className="full-passenger-stack">{passengers.map((passenger, index) => <article key={index}><header><Users size={15}/><strong>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</strong></header><div className="form-grid four"><label>Nombre(s)<input value={passenger.first_name || ''} onChange={event => patchPassengerName(index, 'first_name', event.target.value)} placeholder={passenger.full_name || 'Nombre'}/></label><label>Apellido(s)<input value={passenger.last_name || ''} onChange={event => patchPassengerName(index, 'last_name', event.target.value)}/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div><div className="form-grid four"><label>Nacionalidad<input value={passenger.nationality} onChange={event => patchPassenger(index, { nationality: event.target.value })}/></label><label>Tipo documento<select value={passenger.document_type} onChange={event => patchPassenger(index, { document_type: event.target.value })}><option>Pasaporte</option><option>Cédula</option><option>Otro</option></select></label><label>N° documento<input value={passenger.document_number} onChange={event => patchPassenger(index, { document_number: event.target.value })}/></label><label>Nacimiento<input type="date" value={passenger.birth_date} onChange={event => patchPassenger(index, { birth_date: event.target.value })}/></label></div><div className="form-grid three"><label>Género declarado<select value={passenger.gender || ''} onChange={event => patchPassenger(index, { gender: event.target.value })}><option value="">Sin informar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="X">Otro / X</option></select></label><label>Restricciones alimentarias<input value={passenger.dietary_restrictions} onChange={event => patchPassenger(index, { dietary_restrictions: event.target.value })} placeholder="Ninguna / detalle"/></label><label>Discapacidad / movilidad <span>si corresponde</span><input value={passenger.disability_type || ''} onChange={event => patchPassenger(index, { disability_type: event.target.value })} placeholder="Física, sensorial, apoyo requerido…"/></label></div><label>Observaciones médicas o de movilidad<textarea value={passenger.medical_notes || ''} onChange={event => patchPassenger(index, { medical_notes: event.target.value })} placeholder="Solo información necesaria para ejecutar el servicio"/></label></article>)}</div>
       <label>Observaciones generales<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Acuerdos y datos relevantes para completar la reserva"/></label>
-      <FlowActions busy={busy} onSave={() => void persist(paymentSent ? 'payment_link_sent' : 'accepted_payment')} onNext={async () => { setBusy(true); try { await persist(paymentSent ? 'payment_link_sent' : 'accepted_payment', true); if (!paymentSent) throw new Error('Comparte el link de pago antes de avanzar al itinerario.'); setActiveStep(4); } catch (error: any) { setMessage(error?.message || 'No se pudo avanzar.'); } finally { setBusy(false); } }} nextLabel="Preparar itinerario"/>
+      <FlowActions busy={busy} onSave={() => void persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : paymentReady ? 'payment_coordinated' : 'accepted_payment')} onNext={async () => { setBusy(true); try { await persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : paymentReady ? 'payment_coordinated' : 'accepted_payment', true); if (!paymentReady) throw new Error('Comparte una URL real de cobro o elige “Continuar sin link”.'); setActiveStep(4); } catch (error: any) { setMessage(error?.message || 'No se pudo avanzar.'); } finally { setBusy(false); } }} nextLabel="Preparar itinerario"/>
     </section>}
 
     {activeStep === 4 && <section className="flow-card">
@@ -543,9 +605,11 @@ export default function SalesFlowForm({
 function FlowTitle({ number, title, text }: { number: string; title: string; text: string }) {
   return <div className="flow-title"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>;
 }
+
 function FlowActions({ busy, onSave, onNext, nextLabel }: { busy: boolean; onSave: () => void; onNext: () => void | Promise<void>; nextLabel: string }) {
   return <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={onSave}>{busy ? 'Guardando…' : 'Guardar'}</button><button className="button dark big" disabled={busy} onClick={() => void onNext()}>{nextLabel} <ArrowRight size={16}/></button></div>;
 }
+
 function AutoPaxPreview({ reference, count }: { reference: string; count: number }) {
   return <div className="auto-pax-preview"><div><Users size={17}/><span><strong>Pasajeros preparados automáticamente</strong><small>El número de pax crea los códigos; los nombres reales se completan después.</small></span></div><div>{Array.from({ length: Math.min(count, 12) }, (_, index) => <span key={index}>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</span>)}{count > 12 && <span>+{count - 12} pax</span>}</div></div>;
 }
