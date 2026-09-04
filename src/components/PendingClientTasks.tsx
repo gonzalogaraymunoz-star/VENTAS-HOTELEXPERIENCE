@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, BellRing, CheckCircle2, ChevronRight, X } from 'lucide-react';
+import { ArrowUpRight, BellRing, CheckCircle2, ChevronRight, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import './PendingClientTasks.css';
 
@@ -14,7 +14,10 @@ type PendingTask = {
   title: string;
   detail: string;
   sort_order: number;
+  pax_name?: string | null;
 };
+
+type PriorityFilter = 'all' | 'Alta' | 'Media';
 
 function salesStepFor(taskKey: string) {
   if (taskKey.startsWith('sales_missing_name:') || taskKey.startsWith('sales_missing_contact:')) return 1;
@@ -47,12 +50,14 @@ export default function PendingClientTasks({ scope }: { scope: 'sales' | 'operat
   const [tasks, setTasks] = useState<PendingTask[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [priority, setPriority] = useState<PriorityFilter>('all');
   const previousCount = useRef(0);
 
   async function refresh() {
     setLoading(true);
     const { data, error } = await supabase
-      .from('client_pending_tasks')
+      .from('client_pending_tasks_ui')
       .select('*')
       .eq('app_scope', scope)
       .order('sort_order', { ascending: true })
@@ -84,11 +89,28 @@ export default function PendingClientTasks({ scope }: { scope: 'sales' | 'operat
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [scope]);
 
+  const visibleTasks = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return tasks.filter(task => {
+      if (priority !== 'all' && task.priority !== priority) return false;
+      if (!needle) return true;
+      return [task.lead_code, task.pax_name, task.service_code, task.title, task.detail]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [tasks, query, priority]);
+
   const groups = useMemo(() => {
     const map = new Map<string, PendingTask[]>();
-    tasks.forEach(task => map.set(task.lead_code, [...(map.get(task.lead_code) || []), task]));
-    return Array.from(map.entries()).map(([code, rows]) => ({ code, rows }));
-  }, [tasks]);
+    visibleTasks.forEach(task => map.set(task.lead_code, [...(map.get(task.lead_code) || []), task]));
+    return Array.from(map.entries()).map(([code, rows]) => ({
+      code,
+      paxName: rows.find(row => row.pax_name)?.pax_name || '',
+      rows,
+    }));
+  }, [visibleTasks]);
 
   return <>
     <button className={`pending-task-launcher ${tasks.length ? 'has-items' : ''}`} onClick={() => setOpen(value => !value)} title="Pendientes por cliente">
@@ -96,12 +118,21 @@ export default function PendingClientTasks({ scope }: { scope: 'sales' | 'operat
     </button>
     <aside className={`pending-task-drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
       <header>
-        <div><small>{scope === 'sales' ? 'LINK VENTAS' : 'HOTEL EXPERIENCE'}</small><strong>Pendientes por código</strong><span>{tasks.length ? `${tasks.length} tarea(s) activa(s)` : 'Sin tareas pendientes'}</span></div>
+        <div><small>{scope === 'sales' ? 'LINK VENTAS' : 'HOTEL EXPERIENCE'}</small><strong>Pendientes por cliente</strong><span>{tasks.length ? `${tasks.length} tarea(s) activa(s)` : 'Sin tareas pendientes'}</span></div>
         <button onClick={() => setOpen(false)} aria-label="Cerrar pendientes"><X size={18}/></button>
       </header>
+      <div className="pending-task-controls">
+        <label className="pending-task-search"><Search size={14}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar código, pasajero o pendiente…"/></label>
+        <div className="pending-task-priority" role="group" aria-label="Filtrar por prioridad">
+          <button className={priority === 'all' ? 'active' : ''} onClick={() => setPriority('all')}>Todos</button>
+          <button className={priority === 'Alta' ? 'active' : ''} onClick={() => setPriority('Alta')}>Alta</button>
+          <button className={priority === 'Media' ? 'active' : ''} onClick={() => setPriority('Media')}>Media</button>
+        </div>
+        {(query || priority !== 'all') && <button className="pending-clear-filter" onClick={() => { setQuery(''); setPriority('all'); }}>Limpiar filtro</button>}
+      </div>
       <div className="pending-task-body">
-        {loading && tasks.length === 0 ? <div className="pending-task-empty">Actualizando…</div> : groups.length === 0 ? <div className="pending-task-empty"><CheckCircle2 size={24}/><strong>Todo al día</strong><span>Los nuevos pendientes aparecerán aquí automáticamente.</span></div> : groups.slice(0, 12).map(group => <article className="pending-client-card" key={group.code}>
-          <div className="pending-client-head"><strong>{group.code}</strong><span>{group.rows.length}</span></div>
+        {loading && tasks.length === 0 ? <div className="pending-task-empty">Actualizando…</div> : groups.length === 0 ? <div className="pending-task-empty"><CheckCircle2 size={24}/><strong>{tasks.length ? 'Sin coincidencias' : 'Todo al día'}</strong><span>{tasks.length ? 'Prueba otro código, nombre de pasajero o prioridad.' : 'Los nuevos pendientes aparecerán aquí automáticamente.'}</span></div> : groups.slice(0, 12).map(group => <article className="pending-client-card" key={group.code}>
+          <div className="pending-client-head"><span className="pending-client-identity"><strong>{group.code}</strong><small>{group.paxName || 'Pasajero por completar'}</small></span><span className="pending-client-count">{group.rows.length}</span></div>
           <div>{group.rows.slice(0, 5).map(task => scope === 'sales' ? <button key={task.task_key} type="button" onClick={() => openTask(task)} className={`pending-task-row pending-task-action priority-${task.priority.toLowerCase()}`}>
             <ChevronRight size={14}/><span><strong>{task.title}</strong><small>{task.service_code ? `${task.service_code} · ` : ''}{task.detail}</small></span><span className="pending-go"><ArrowUpRight size={13}/> Ir</span>
           </button> : <section key={task.task_key} className={`pending-task-row priority-${task.priority.toLowerCase()}`}>
@@ -110,7 +141,7 @@ export default function PendingClientTasks({ scope }: { scope: 'sales' | 'operat
           {group.rows.length > 5 && <small className="pending-more">+{group.rows.length - 5} pendiente(s) adicionales</small>}
         </article>)}
       </div>
-      <footer><button onClick={() => void refresh()}>Actualizar ahora</button></footer>
+      <footer><span>{visibleTasks.length} visible(s) · {tasks.length} total</span><button onClick={() => void refresh()}>Actualizar ahora</button></footer>
     </aside>
   </>;
 }
