@@ -1,0 +1,31 @@
+name: Run quote payment patch
+
+on:
+  push:
+    branches:
+      - fix/quote-pdf-payment-flow
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/quote-pdf-payment-flow
+          fetch-depth: 0
+      - name: Apply patch
+        shell: bash
+        run: |
+          if grep -q "paymentCoordination" src/components/SalesFlowForm.tsx; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          python3 .github/patch_quote_payment.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/SalesFlowForm.tsx src/components/SalesFlowForm.css src/lib/customerQuote.ts src/types.ts supabase/20260904_quote_payment_ux.sql
+          git commit -m "fix: quote details one-page PDF flexible payment [auto-patch]"
+          git push origin HEAD:fix/quote-pdf-payment-flow
