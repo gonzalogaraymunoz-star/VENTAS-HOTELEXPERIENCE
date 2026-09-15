@@ -242,3 +242,5 @@
   .flow-bottom-actions .button{width:100%}
   .final-gate{grid-template-columns:1fr}
 }
+
+.linked-tour-chip{display:inline-flex!important;width:max-content;margin-top:7px;border:1px solid #8eaf99;border-radius:999px;background:#eff7f1;color:#245f3f;padding:5px 8px;font-size:8px!important;font-weight:850;letter-spacing:.04em}
