@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, ShoppingBag, Users, X, Kanban } from 'lucide-react';
+import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
-import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, Supplier } from '../types';
+import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, SellableTourDeparture, Supplier } from '../types';
 import VisualCatalog from './VisualCatalog';
 import SalesFlowForm from './SalesFlowForm';
 import { ProductWorkspace } from './SalesWorkspaces';
 import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
+import TourSalesBoard from './TourSalesBoard';
 
-type Screen = 'dashboard' | 'new-sale' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
+type Screen = 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
 
 type AppData = {
   hotels: HotelPartner[];
@@ -31,6 +32,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editLeadId, setEditLeadId] = useState('');
   const [initialProductId, setInitialProductId] = useState('');
+  const [initialDeparture,setInitialDeparture]=useState<SellableTourDeparture|null>(null);
   const [paymentLeadId, setPaymentLeadId] = useState('');
 
   async function refresh() {
@@ -58,6 +60,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
       if (!detail?.leadId) return;
       setEditLeadId(detail.leadId);
       setInitialProductId('');
+      setInitialDeparture(null);
       setScreen('new-sale');
       setMobileOpen(false);
     };
@@ -68,6 +71,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   const nav: { id: Screen; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'new-sale', label: 'Cotización e ingreso', icon: ShoppingBag },
+    { id: 'tours', label: 'Tours / Operaciones', icon: Route },
     { id: 'catalog', label: 'Catálogo', icon: BookOpen },
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
@@ -76,12 +80,12 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   ];
 
   function go(next: Screen) { setScreen(next); setMobileOpen(false); }
-  function newIntake(productId = '') { setEditLeadId(''); setInitialProductId(productId); go('new-sale'); }
-  function editIntake(leadId: string) { setEditLeadId(leadId); setInitialProductId(''); go('new-sale'); }
+  function newIntake(productId = '',departure:SellableTourDeparture|null=null) { setEditLeadId(''); setInitialProductId(productId);setInitialDeparture(departure); go('new-sale'); }
+  function editIntake(leadId: string) { setEditLeadId(leadId); setInitialProductId('');setInitialDeparture(null); go('new-sale'); }
   function openPayments(leadId = '') { setPaymentLeadId(leadId); go('payments'); }
   const operationsUrl = import.meta.env.VITE_OPERATIONS_URL as string | undefined;
   const confirmedServices = data.services.filter(service => ['confirmed', 'completed'].includes(String(service.booking_status)));
-  const salesFormKey = editLeadId ? `lead:${editLeadId}` : initialProductId ? `product:${initialProductId}` : 'new-sale';
+  const salesFormKey = editLeadId ? `lead:${editLeadId}` : initialDeparture?`departure:${initialDeparture.departure_id}`:initialProductId ? `product:${initialProductId}` : 'new-sale';
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
@@ -107,7 +111,8 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
         {error && <div className="error-box page-error">{error}</div>}
         {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
-          {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId(''); go('leads'); }}/>} 
+          {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
+          {screen === 'tours'&&<TourSalesBoard onAddReservation={departure=>newIntake(departure.product_catalog_id||'',departure)}/>} 
           {screen === 'catalog' && <VisualCatalog products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
@@ -123,6 +128,7 @@ function titleFor(screen: Screen) {
   return ({
     dashboard: 'Centro de trabajo',
     'new-sale': 'Cotización e ingreso',
+    tours:'Tours asignados · Operaciones',
     catalog: 'Catálogo visual',
     leads: 'Clientes y reservas',
     pipeline: 'Pipeline comercial',
