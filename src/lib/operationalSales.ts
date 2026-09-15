@@ -11,34 +11,41 @@ export type OperationalPassengerRow = {
   medical_notes?: string | null;
 };
 
+type AutofillServiceEntry = {
+  service?: {
+    id?: string;
+    booking_status?: string | null;
+  } | null;
+  participant_ids?: string[] | null;
+};
+
+type ReservationAutofillContext = {
+  passengers?: Array<OperationalPassengerRow & { is_primary?: boolean | null }>;
+  services?: AutofillServiceEntry[];
+};
+
 export async function loadOperationalPassengerData(leadId: string) {
-  const [passengerRes, serviceRes] = await Promise.all([
-    supabase
-      .from('passengers')
-      .select('id,passenger_code,first_name,last_name,gender,disability_type,medical_notes')
-      .eq('lead_id', leadId)
-      .order('is_primary', { ascending: false })
-      .order('passenger_code', { ascending: true }),
-    supabase
-      .from('lead_services')
-      .select('id,lead_service_passengers(passenger_id,position,confirmed)')
-      .eq('lead_id', leadId)
-      .eq('booking_status', 'quoted')
-      .order('created_at', { ascending: true })
-      .order('id', { ascending: true }),
-  ]);
-  if (passengerRes.error) throw passengerRes.error;
-  if (serviceRes.error) throw serviceRes.error;
-  const passengers = (passengerRes.data || []) as OperationalPassengerRow[];
+  const { data, error } = await supabase.rpc('get_reservation_autofill_context', { p_lead_id: leadId });
+  if (error) throw error;
+
+  const context = (data || {}) as ReservationAutofillContext;
+  const passengers = (context.passengers || []) as OperationalPassengerRow[];
   const passengerIndex = new Map(passengers.map((row, index) => [row.id, index]));
-  const participantMatrix = (serviceRes.data || []).map((service: any) => ({
-    service_id: service.id as string,
-    passenger_indexes: (service.lead_service_passengers || [])
-      .sort((a: any, b: any) => Number(a.position || 0) - Number(b.position || 0))
-      .map((link: any) => passengerIndex.get(link.passenger_id))
-      .filter((value: number | undefined): value is number => value != null),
-    confirmed: (service.lead_service_passengers || []).length > 0 && (service.lead_service_passengers || []).every((link: any) => Boolean(link.confirmed)),
-  }));
+
+  const participantMatrix = (context.services || [])
+    .filter(entry => entry.service?.booking_status === 'quoted')
+    .map(entry => {
+      const participantIds = Array.isArray(entry.participant_ids) ? entry.participant_ids : [];
+      const passengerIndexes = participantIds
+        .map(passengerId => passengerIndex.get(passengerId))
+        .filter((value: number | undefined): value is number => value != null);
+      return {
+        service_id: String(entry.service?.id || ''),
+        passenger_indexes: passengerIndexes,
+        confirmed: participantIds.length > 0,
+      };
+    });
+
   return { passengers, participantMatrix };
 }
 
