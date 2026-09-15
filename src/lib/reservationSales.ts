@@ -83,6 +83,7 @@ function buildPayload(input: ReservationDraftInput) {
       supplier_id: service.supplier_id || null,
       supplier_name: service.supplier_name || null,
       notes: service.notes || null,
+      departure_id:service.departure_id||null,
     };
   });
 
@@ -109,6 +110,11 @@ export async function updateReservationDraft(leadId: string, input: ReservationD
     p_payload: buildPayload(input),
   });
   if (error) throw error;
+  const assignments=input.services.map((service,index)=>({service_index:index,departure_id:service.departure_id||null})).filter(item=>item.departure_id);
+  if(assignments.length){
+    const {error:departureError}=await supabase.rpc('set_link_service_departures',{p_lead_id:leadId,p_assignments:assignments});
+    if(departureError)throw departureError;
+  }
   return data as { lead_id: string; lead_code: string; services_updated: number; passengers_updated: number };
 }
 
