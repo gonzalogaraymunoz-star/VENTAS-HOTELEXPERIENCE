@@ -15,7 +15,7 @@ import { concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib
 import { downloadCustomerItinerary } from '../lib/customerItinerary';
 import type {
   HotelPartner, Lead, LeadService, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
-  SellerProfile, ServiceDraft, Supplier,
+  SellerProfile, ServiceDraft, SellableTourDeparture, Supplier,
 } from '../types';
 import { ProductWorkspace } from './SalesWorkspaces';
 import './SalesFlowForm.css';
@@ -60,6 +60,7 @@ function serviceToDraft(service: LeadService): ServiceDraft {
     seller_commission_pct: margin > 0 ? (Number(service.comision_vendedor || 0) / margin) * 100 : 0,
     notes: service.observacion || '',
     passenger_indexes: Array.from({ length: pax }, (_, index) => index),
+    departure_id:service.departure_id||'',
   };
 }
 
@@ -121,7 +122,7 @@ function stageToStep(stage?: string | null) {
 }
 
 export default function SalesFlowForm({
-  profile, hotels, products, suppliers, sellers, leads, services, initialLeadId, initialProductId,
+  profile, hotels, products, suppliers, sellers, leads, services, initialLeadId, initialProductId,initialDeparture,
   operationsUrl, onSaved, onCompleted,
 }: {
   profile: Profile;
@@ -133,6 +134,7 @@ export default function SalesFlowForm({
   services: LeadService[];
   initialLeadId?: string;
   initialProductId?: string;
+  initialDeparture?:SellableTourDeparture;
   operationsUrl?: string;
   onSaved: () => Promise<void>;
   onCompleted: () => Promise<void>;
@@ -258,8 +260,22 @@ export default function SalesFlowForm({
   }
 
   useEffect(() => {
-    if (initialProductId && !draftServices.some(service => service.product_id === initialProductId)) addProductById(initialProductId);
-  }, [initialProductId]);
+    if (initialProductId&&!initialDeparture && !draftServices.some(service => service.product_id === initialProductId)) addProductById(initialProductId);
+  }, [initialProductId,initialDeparture?.departure_id]);
+
+  useEffect(()=>{
+    if(!initialDeparture||draftServices.some(service=>service.departure_id===initialDeparture.departure_id))return;
+    const product=products.find(item=>item.id===initialDeparture.product_catalog_id)||products.find(item=>item.code===initialDeparture.tour_id);
+    const known=product?resolveProductPrice(product,paxCount):0;
+    setDraftServices(current=>[...current,{
+      product_id:initialDeparture.product_catalog_id||product?.id||'',product_code:initialDeparture.tour_id,
+      product_name:initialDeparture.product_name,category:product?.category||'Tour',date:initialDeparture.service_date,
+      start_time:String(initialDeparture.start_time||'').slice(0,5),pax:paxCount,modality:departureModality(initialDeparture.modality),
+      unit_price:known??0,operator_cost:0,supplier_id:'',supplier_name:'',hotel_commission_pct:0,seller_commission_pct:0,
+      notes:productClientInfo(product),passenger_indexes:allPassengerIndexes(),departure_id:initialDeparture.departure_id,
+      departure_code:initialDeparture.departure_code,departure_capacity:initialDeparture.capacity_total
+    }]);
+  },[initialDeparture?.departure_id,products.length]);
 
   function addManualItem() {
     setDraftServices(current => [...current, {
@@ -572,8 +588,8 @@ export default function SalesFlowForm({
         const calc = economics(service.unit_price, service.pax, service.operator_cost, 0, 0);
         const selected = new Set(service.passenger_indexes || []);
         return <article key={`${service.product_id || 'manual'}-${index}`}>
-          <header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small></div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header>
-          <div className="form-grid three"><label>Fecha<input type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="form-grid three"><label>Hora inicio <span>para itinerario</span><input type="time" value={service.start_time} onChange={event => patchService(index, { start_time: event.target.value })}/></label><label>Horario referencial<input readOnly value={product?.schedule || "Según coordinación"}/></label><label>Duración referencial<input readOnly value={product?.duration_hours ? `${product.duration_hours} h` : "Por confirmar"}/></label></div>
+          <header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small>{service.departure_id&&<div className="linked-tour-chip">TOUR ASIGNADO · {service.departure_code} · PAX {service.pax}/{service.departure_capacity||'—'}</div>}</div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header>
+          <div className="form-grid three"><label>Fecha<input disabled={Boolean(service.departure_id)} type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select disabled={Boolean(service.departure_id)} value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="form-grid three"><label>Hora inicio <span>para itinerario</span><input disabled={Boolean(service.departure_id)} type="time" value={service.start_time} onChange={event => patchService(index, { start_time: event.target.value })}/></label><label>Horario referencial<input readOnly value={product?.schedule || "Según coordinación"}/></label><label>Duración referencial<input readOnly value={product?.duration_hours ? `${product.duration_hours} h` : "Por confirmar"}/></label></div>
           <div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div>
           <div className="service-client-info"><label>Información para el cliente<textarea value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Descripción del lugar, recorrido, recomendaciones y condiciones particulares…"/></label>{product && <button type="button" className="button ghost" onClick={() => patchService(index, { notes: productClientInfo(product) })}>Rellenar desde catálogo</button>}</div>
           <div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div>
@@ -614,6 +630,8 @@ export default function SalesFlowForm({
     {partnerOpen && <div className="quote-overlay"><div className="partner-request-panel"><header className="quote-overlay-head"><div><p className="eyebrow">NUEVO HOTEL / NEGOCIO</p><strong>Solicitud de incorporación</strong></div><button className="icon-button" onClick={() => setPartnerOpen(false)}><X size={18}/></button></header><div className="partner-request-body"><div className="form-grid two"><label>Nombre<input value={partnerDraft.name} onChange={event => setPartnerDraft(value => ({ ...value, name: event.target.value }))}/></label><label>Tipo<select value={partnerDraft.partnerType} onChange={event => setPartnerDraft(value => ({ ...value, partnerType: event.target.value }))}><option value="hotel">Hotel</option><option value="agency">Agencia</option><option value="business">Negocio</option><option value="other">Otro</option></select></label></div><div className="form-grid two"><label>Prefijo<input maxLength={5} value={partnerDraft.leadPrefix} onChange={event => setPartnerDraft(value => ({ ...value, leadPrefix: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}/></label><label>Contacto<input value={partnerDraft.contactName} onChange={event => setPartnerDraft(value => ({ ...value, contactName: event.target.value }))}/></label></div><div className="form-grid two"><label>Email<input value={partnerDraft.email} onChange={event => setPartnerDraft(value => ({ ...value, email: event.target.value }))}/></label><label>Teléfono<input value={partnerDraft.phone} onChange={event => setPartnerDraft(value => ({ ...value, phone: event.target.value }))}/></label></div><label>Notas<textarea value={partnerDraft.notes} onChange={event => setPartnerDraft(value => ({ ...value, notes: event.target.value }))}/></label>{partnerMessage && <div className={partnerMessage.includes('aprobación') ? 'success-box' : 'error-box'}>{partnerMessage}</div>}<button className="button dark wide" disabled={partnerBusy || !partnerDraft.name || partnerDraft.leadPrefix.length < 2} onClick={() => void submitPartner()}>{partnerBusy ? 'Enviando…' : 'Enviar a aprobación'}</button></div></div></div>}
   </div>;
 }
+
+function departureModality(value:string){return value==='privado'?'private_per_pax':value==='semiprivado'?'semi_private':'regular_per_pax'}
 
 function FlowTitle({ number, title, text }: { number: string; title: string; text: string }) {
   return <div className="flow-title"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>;
