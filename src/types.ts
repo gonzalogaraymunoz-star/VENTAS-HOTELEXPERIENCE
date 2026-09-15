@@ -157,6 +157,7 @@ export type LeadService = {
   tour_id?: string | null;
   hora_inicio?: string | null;
   operation_ready_at?: string | null;
+  departure_id?:string|null;
   tax_treatment_snapshot?: string | null;
   tax_rate_snapshot?: number | null;
   created_at: string;
@@ -198,6 +199,27 @@ export type ServiceDraft = {
   seller_commission_pct: number;
   notes: string;
   passenger_indexes?: number[];
+  departure_id?: string;
+  departure_code?: string;
+  departure_capacity?: number | null;
+};
+
+export type SellableTourDeparture = {
+  departure_id: string;
+  departure_code: string;
+  tour_id: string;
+  product_catalog_id?: string | null;
+  product_name: string;
+  service_date: string;
+  start_time?: string | null;
+  capacity_total: number;
+  modality: 'regular' | 'semiprivado' | 'privado' | string;
+  status: 'open' | 'closed' | 'completed' | 'cancelled' | string;
+  notes?: string | null;
+  confirmed_pax: number;
+  reservation_count: number;
+  available_pax?: number | null;
+  latest_sales_note?: string | null;
 };
 
 export type PaymentMovement = {
