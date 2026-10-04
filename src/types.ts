@@ -220,6 +220,8 @@ export type SellableTourDeparture = {
   reservation_count: number;
   available_pax?: number | null;
   latest_sales_note?: string | null;
+  reservation_references?: string[];
+  reservation_codes?: string[];
 };
 
 export type PaymentMovement = {
