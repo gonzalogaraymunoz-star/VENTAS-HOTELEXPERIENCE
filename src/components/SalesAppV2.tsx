@@ -12,6 +12,8 @@ import TourSalesBoard from './TourSalesBoard';
 
 type Screen = 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
 
+type PendingResolution={taskKey:string;title:string;detail:string;step:number;destination:string};
+
 type AppData = {
   hotels: HotelPartner[];
   products: Product[];
@@ -34,6 +36,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   const [initialProductId, setInitialProductId] = useState('');
   const [initialDeparture,setInitialDeparture]=useState<SellableTourDeparture|null>(null);
   const [paymentLeadId, setPaymentLeadId] = useState('');
+  const [pendingResolution,setPendingResolution]=useState<PendingResolution|null>(null);
 
   async function refresh() {
     setLoading(true); setError('');
@@ -56,11 +59,18 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 
   useEffect(() => {
     const openPending = (event: Event) => {
-      const detail = (event as CustomEvent<{ leadId?: string }>).detail;
+      const detail = (event as CustomEvent<{leadId?:string;taskKey?:string;title?:string;detail?:string;step?:number;destination?:string}>).detail;
       if (!detail?.leadId) return;
       setEditLeadId(detail.leadId);
       setInitialProductId('');
       setInitialDeparture(null);
+      setPendingResolution({
+        taskKey:detail.taskKey||'',
+        title:detail.title||'Pendiente comercial',
+        detail:detail.detail||'Completa esta acción para continuar el proceso.',
+        step:Number.isFinite(detail.step)?Number(detail.step):0,
+        destination:detail.destination||'Cotización e ingreso'
+      });
       setScreen('new-sale');
       setMobileOpen(false);
     };
@@ -80,12 +90,12 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   ];
 
   function go(next: Screen) { setScreen(next); setMobileOpen(false); }
-  function newIntake(productId = '',departure:SellableTourDeparture|null=null) { setEditLeadId(''); setInitialProductId(productId);setInitialDeparture(departure); go('new-sale'); }
-  function editIntake(leadId: string) { setEditLeadId(leadId); setInitialProductId('');setInitialDeparture(null); go('new-sale'); }
+  function newIntake(productId = '',departure:SellableTourDeparture|null=null) { setPendingResolution(null);setEditLeadId(''); setInitialProductId(productId);setInitialDeparture(departure); go('new-sale'); }
+  function editIntake(leadId: string) { setPendingResolution(null);setEditLeadId(leadId); setInitialProductId('');setInitialDeparture(null); go('new-sale'); }
   function openPayments(leadId = '') { setPaymentLeadId(leadId); go('payments'); }
   const operationsUrl = import.meta.env.VITE_OPERATIONS_URL as string | undefined;
   const confirmedServices = data.services.filter(service => ['confirmed', 'completed'].includes(String(service.booking_status)));
-  const salesFormKey = editLeadId ? `lead:${editLeadId}` : initialDeparture?`departure:${initialDeparture.departure_id}`:initialProductId ? `product:${initialProductId}` : 'new-sale';
+  const salesFormKey = editLeadId ? `lead:${editLeadId}:${pendingResolution?.taskKey||'normal'}` : initialDeparture?`departure:${initialDeparture.departure_id}`:initialProductId ? `product:${initialProductId}` : 'new-sale';
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
@@ -111,7 +121,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
         {error && <div className="error-box page-error">{error}</div>}
         {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
-          {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
+          {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} pendingContext={pendingResolution||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setPendingResolution(null);setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
           {screen === 'tours'&&<TourSalesBoard onAddReservation={departure=>newIntake(departure.product_catalog_id||'',departure)}/>} 
           {screen === 'catalog' && <VisualCatalog products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
