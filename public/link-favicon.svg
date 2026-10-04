@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LINK">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g fill="none" stroke="#000000" stroke-width="12" stroke-linecap="butt" stroke-linejoin="round">
+    <path d="M92 184V122c0-31 25-56 56-56h60"/>
+    <path d="M304 66h60c31 0 56 25 56 56v62"/>
+    <path d="M92 328v62c0 31 25 56 56 56h60"/>
+    <path d="M304 446h60c31 0 56-25 56-56v-62"/>
+  </g>
+  <text x="256" y="282" text-anchor="middle" fill="#000000" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="700" letter-spacing="24">LINK</text>
+</svg>
