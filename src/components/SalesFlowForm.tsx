@@ -123,7 +123,7 @@ function stageToStep(stage?: string | null) {
 
 export default function SalesFlowForm({
   profile, hotels, products, suppliers, sellers, leads, services, initialLeadId, initialProductId,initialDeparture,
-  operationsUrl, onSaved, onCompleted,
+  pendingContext, operationsUrl, onSaved, onCompleted,
 }: {
   profile: Profile;
   hotels: HotelPartner[];
@@ -135,6 +135,7 @@ export default function SalesFlowForm({
   initialLeadId?: string;
   initialProductId?: string;
   initialDeparture?:SellableTourDeparture;
+  pendingContext?:{taskKey:string;title:string;detail:string;step:number;destination:string};
   operationsUrl?: string;
   onSaved: () => Promise<void>;
   onCompleted: () => Promise<void>;
@@ -145,7 +146,7 @@ export default function SalesFlowForm({
     [sellers, profile.id, profile.role],
   );
 
-  const [activeStep, setActiveStep] = useState(() => stageToStep(existingLead?.sales_stage));
+  const [activeStep, setActiveStep] = useState(() => pendingContext ? Math.max(0,Math.min(5,pendingContext.step)) : stageToStep(existingLead?.sales_stage));
   const [leadId, setLeadId] = useState(initialLeadId || '');
   const [leadCode, setLeadCode] = useState(existingLead?.codigo || '');
   const [reference, setReference] = useState(existingLead?.reservation_reference || '');
@@ -186,6 +187,14 @@ export default function SalesFlowForm({
   const paymentSent = Boolean(currentLead?.payment_link_sent_at);
   const paymentReady = paymentSent || paymentCoordination === 'link_sent' || paymentCoordination === 'external_or_later';
   const itinerarySent = Boolean(currentLead?.itinerary_sent_at);
+
+  useEffect(() => {
+    if (!pendingContext) return;
+    setActiveStep(Math.max(0,Math.min(5,pendingContext.step)));
+    window.setTimeout(()=>{
+      document.querySelector('.sales-pending-resolution')?.scrollIntoView({behavior:'smooth',block:'start'});
+    },80);
+  }, [pendingContext?.taskKey]);
 
   useEffect(() => {
     if (!hotelId && hotels[0]) setHotelId(hotels[0].id);
@@ -552,6 +561,11 @@ export default function SalesFlowForm({
     <nav className="sales-stepper" aria-label="Proceso comercial">
       {steps.map(([number, label], index) => <button key={number} className={`${activeStep === index ? 'active ' : ''}${stageUnlocked(index) ? '' : 'locked'}`} disabled={!stageUnlocked(index)} onClick={() => setActiveStep(index)}><span>{number}</span><strong>{label}</strong>{index < activeStep || (index === 2 && quoteSent) || (index === 3 && paymentReady) || (index === 4 && itinerarySent) ? <Check size={14}/> : null}</button>)}
     </nav>
+
+    {pendingContext&&<section className="sales-pending-resolution">
+      <div><span>PENDIENTE ACTIVO</span><strong>{pendingContext.title}</strong><p>{pendingContext.detail}</p></div>
+      <div><small>Resolver en</small><b>{pendingContext.destination}</b></div>
+    </section>}
 
     {message && <div className={/no se|falta|error/i.test(message) ? 'error-box' : 'success-box'}>{message}</div>}
 
