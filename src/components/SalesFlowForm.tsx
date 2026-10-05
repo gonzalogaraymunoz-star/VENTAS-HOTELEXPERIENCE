@@ -14,7 +14,7 @@ import {
 } from '../lib/salesFlow';
 import { buildCustomerQuotePdf, concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib/customerQuote';
 import { buildCustomerItineraryPdf, downloadCustomerItinerary } from '../lib/customerItinerary';
-import { archiveLink, archivePassengerSnapshot, archivePdf, archiveReservationSnapshot, ensureReservationArchive } from '../lib/reservationArchive';
+import { archiveLink, archivePassengerSnapshot, archivePdf, archiveReservationSnapshot, ensureReservationArchive, prepareReservationRiskSheets } from '../lib/reservationArchive';
 import type {
   HotelPartner, Lead, LeadService, OperationListSite, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
   SellerProfile, ServiceDraft, SellableTourDeparture, Supplier,
@@ -570,6 +570,7 @@ export default function SalesFlowForm({
         await ensureReservationArchive(operationsUrl,id).catch(error=>console.warn('Carpeta Drive pendiente',error));
         await archiveReservationSnapshot(operationsUrl,id).catch(error=>console.warn('Ficha de reserva sin respaldo central',error));
         await archivePassengerSnapshot(operationsUrl,id).catch(error=>console.warn('Antecedentes pax sin respaldo central',error));
+        await prepareReservationRiskSheets(operationsUrl,id).catch(error=>console.warn('Hojas de riesgo pendientes de preparación',error));
       }
       setMessage('Reserva completada. El mismo registro quedó entregado a Operaciones con ficha y antecedentes vinculados.');
       await onCompleted();
