@@ -3,7 +3,7 @@ import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu,
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
 import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, SellableTourDeparture, Supplier } from '../types';
-import VisualCatalog from './VisualCatalog';
+import EmbeddedCatalog from './EmbeddedCatalog';
 import SalesFlowForm from './SalesFlowForm';
 import { ProductWorkspace } from './SalesWorkspaces';
 import { AccountWorkspace } from './ClientPaymentsWorkspace';
@@ -123,7 +123,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
           {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} pendingContext={pendingResolution||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setPendingResolution(null);setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
           {screen === 'tours'&&<TourSalesBoard onAddReservation={departure=>newIntake(departure.product_catalog_id||'',departure)}/>} 
-          {screen === 'catalog' && <VisualCatalog products={data.products} onQuote={productId => newIntake(productId)}/>} 
+          {screen === 'catalog' && <EmbeddedCatalog/>} 
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
