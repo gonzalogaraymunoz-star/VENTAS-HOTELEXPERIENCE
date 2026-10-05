@@ -9,7 +9,7 @@ export default function EmbeddedCatalog() {
     <iframe
       className="embedded-catalog-frame"
       src={catalogUrl}
-      title="Catálogo de experiencias"
+      title="Catálogo Hotel Experience"
       loading="eager"
       referrerPolicy="strict-origin-when-cross-origin"
     />
