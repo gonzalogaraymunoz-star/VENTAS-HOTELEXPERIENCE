@@ -123,7 +123,7 @@ export default function SalesApp({ profile }: { profile: Profile }) {
           {screen==='leads' && <LeadTable leads={data.leads} services={data.services} onConfirm={async(id)=>{await confirmSale(id);await refresh();}} onUpdated={refresh}/>}
           {screen==='pipeline' && <Pipeline leads={data.leads} onChange={async(id,status)=>{await updateLeadStatus(id,status);await refresh();}}/>}
           {screen==='products' && <div className="screen-stack"><ManualQuoteBuilder/><ProductWorkspace products={data.products} onQuote={productId=>startQuote(productId)}/></div>} 
-          {screen==='payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} onAdded={refresh}/>} 
+          {screen==='payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
         </>}
       </section>
     </main>
