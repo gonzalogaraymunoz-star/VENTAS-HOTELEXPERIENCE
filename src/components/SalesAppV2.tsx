@@ -127,7 +127,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
-          {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} onAdded={refresh}/>} 
+          {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
         </>}
       </section>
     </main>
