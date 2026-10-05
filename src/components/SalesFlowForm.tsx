@@ -7,6 +7,7 @@ import { arrivalPriority, createSale, loadLeadPassengers, requestPartner, stayLe
 import { loadOperationalPassengerData, persistOperationalPassengerData } from '../lib/operationalSales';
 import { clp, economics, resolveProductPrice } from '../lib/money';
 import { confirmReservation, updateReservationDraft, type ReservationDraftInput } from '../lib/reservationSales';
+import { loadOperationListCatalog } from '../lib/operationListCatalog';
 import {
   createQuoteSnapshot, itineraryText, loadLatestQuote, markQuoteStatus, sendItineraryEmail,
   sharePaymentLink, updateSalesFlow,
@@ -14,7 +15,7 @@ import {
 import { concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib/customerQuote';
 import { downloadCustomerItinerary } from '../lib/customerItinerary';
 import type {
-  HotelPartner, Lead, LeadService, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
+  HotelPartner, Lead, LeadService, OperationListSite, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
   SellerProfile, ServiceDraft, SellableTourDeparture, Supplier,
 } from '../types';
 import { ProductWorkspace } from './SalesWorkspaces';
@@ -59,6 +60,7 @@ function serviceToDraft(service: LeadService): ServiceDraft {
     hotel_commission_pct: margin > 0 ? (Number(service.comision_hotel || 0) / margin) * 100 : 0,
     seller_commission_pct: margin > 0 ? (Number(service.comision_vendedor || 0) / margin) * 100 : 0,
     notes: service.observacion || '',
+    operation_list_template_key: service.operation_list_template_key || '',
     passenger_indexes: Array.from({ length: pax }, (_, index) => index),
     departure_id:service.departure_id||'',
   };
@@ -174,10 +176,20 @@ export default function SalesFlowForm({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [operationListSites, setOperationListSites] = useState<OperationListSite[]>([]);
+  const [operationListCatalogError, setOperationListCatalogError] = useState('');
   const [partnerOpen, setPartnerOpen] = useState(false);
   const [partnerBusy, setPartnerBusy] = useState(false);
   const [partnerMessage, setPartnerMessage] = useState('');
   const [partnerDraft, setPartnerDraft] = useState({ name: '', partnerType: 'hotel', leadPrefix: '', contactName: '', email: '', phone: '', notes: '' });
+
+  useEffect(() => {
+    let alive = true;
+    loadOperationListCatalog()
+      .then(rows => { if (alive) { setOperationListSites(rows); setOperationListCatalogError(''); } })
+      .catch(error => { if (alive) setOperationListCatalogError(error?.message || 'No se pudieron cargar las listas operacionales.'); });
+    return () => { alive = false; };
+  }, []);
 
   const priority = arrivalPriority(checkin);
   const hotel = hotels.find(item => item.id === hotelId);
@@ -290,7 +302,7 @@ export default function SalesFlowForm({
     setDraftServices(current => [...current, {
       product_id: '', product_code: 'MANUAL', product_name: '', category: 'Manual', date: '', start_time: '',
       pax: paxCount, modality: 'manual', unit_price: 0, operator_cost: 0, supplier_id: '', supplier_name: '',
-      hotel_commission_pct: 0, seller_commission_pct: 0, notes: '', passenger_indexes: allPassengerIndexes(),
+      hotel_commission_pct: 0, seller_commission_pct: 0, notes: '', operation_list_template_key: '', passenger_indexes: allPassengerIndexes(),
     }]);
   }
 
@@ -351,6 +363,7 @@ export default function SalesFlowForm({
     const identity = input.contact.trim() || input.passengers[0]?.full_name?.trim() || input.passengers[0]?.email?.trim() || input.passengers[0]?.phone?.trim();
     if (!identity) throw new Error('Para guardar el ingreso necesitamos al menos nombre, teléfono o email del cliente principal.');
     if (input.services.some(service => !(service.passenger_indexes?.length))) throw new Error('Cada producto debe tener al menos un pasajero seleccionado.');
+    if (input.services.some(service => !service.product_id && !service.operation_list_template_key)) throw new Error('Cada ítem manual debe indicar qué lista operacional se automatizará.');
 
     let id = leadId;
     if (id) {
@@ -601,8 +614,15 @@ export default function SalesFlowForm({
         const product = products.find(item => item.id === service.product_id);
         const calc = economics(service.unit_price, service.pax, service.operator_cost, 0, 0);
         const selected = new Set(service.passenger_indexes || []);
+        const manualList = operationListSites.find(item => item.template_key === service.operation_list_template_key);
         return <article key={`${service.product_id || 'manual'}-${index}`}>
           <header><div><span>{modeLabel(service.modality)}</span>{service.product_id ? <h3>{service.product_name}</h3> : <input value={service.product_name} onChange={event => patchService(index, { product_name: event.target.value })} placeholder="Nombre del servicio"/>}<small>{tierSummary(product, service.pax, service.unit_price)}</small>{service.departure_id&&<div className="linked-tour-chip">TOUR ASIGNADO · {service.departure_code} · PAX {service.pax}/{service.departure_capacity||'—'}</div>}</div><button className="icon-button danger" onClick={() => setDraftServices(current => current.filter((_, row) => row !== index))}><X size={16}/></button></header>
+          {!product && <section className="manual-operation-list-contract">
+            <div className="manual-operation-list-copy"><strong>Lista operacional que se automatizará</strong><small>Selecciona el sitio de las listas unificadas. Esta elección viajará con la reserva hasta Hotel Experience.</small></div>
+            <label><span>Sitio / lista unificada</span><select value={service.operation_list_template_key || ''} onChange={event => patchService(index, { operation_list_template_key: event.target.value })}><option value="">Seleccionar lista…</option>{operationListSites.map(site => <option key={site.template_key} value={site.template_key}>{site.site_name} · Lista {site.display_name}</option>)}</select></label>
+            {manualList ? <div className="manual-operation-list-preview"><CheckCircle2 size={16}/><span><b>Se automatizará: {manualList.display_name}</b><small>{manualList.site_name}</small></span></div> : <div className="manual-operation-list-pending">Elige la lista antes de guardar este ítem manual.</div>}
+            {operationListCatalogError && <small className="manual-operation-list-error">{operationListCatalogError}</small>}
+          </section>}
           <div className="form-grid three"><label>Fecha<input disabled={Boolean(service.departure_id)} type="date" value={service.date} onChange={event => patchService(index, { date: event.target.value })}/></label><label>Modalidad<select disabled={Boolean(service.departure_id)} value={service.modality} onChange={event => patchService(index, { modality: event.target.value })}><option value="private_per_pax">Privado</option><option value="semi_private">Semi privado</option><option value="regular_per_pax">Regular</option><option value="manual">Personalizado</option></select></label><label>Precio venta p/u<input type="number" min="0" value={service.unit_price} onChange={event => patchService(index, { unit_price: Number(event.target.value || 0) })}/></label></div><div className="form-grid three"><label>Hora inicio <span>para itinerario</span><input disabled={Boolean(service.departure_id)} type="time" value={service.start_time} onChange={event => patchService(index, { start_time: event.target.value })}/></label><label>Horario referencial<input readOnly value={product?.schedule || "Según coordinación"}/></label><label>Duración referencial<input readOnly value={product?.duration_hours ? `${product.duration_hours} h` : "Por confirmar"}/></label></div>
           <div className="service-passenger-selector"><div><strong>Pasajeros de este servicio</strong><small>{selected.size} de {passengers.length} seleccionados · esto alimentará las listas de parques.</small></div><div>{passengers.map((passenger, paxIndex) => <button type="button" key={paxIndex} className={selected.has(paxIndex) ? 'selected' : ''} onClick={() => toggleServicePassenger(index, paxIndex)}><span>P{String(paxIndex + 1).padStart(2, '0')}</span>{passenger.full_name || (paxIndex === 0 ? 'Titular' : `Acompañante ${paxIndex + 1}`)}{selected.has(paxIndex) && <Check size={13}/>}</button>)}</div></div>
           <div className="service-client-info"><label>Información para el cliente<textarea value={service.notes} onChange={event => patchService(index, { notes: event.target.value })} placeholder="Descripción del lugar, recorrido, recomendaciones y condiciones particulares…"/></label>{product && <button type="button" className="button ghost" onClick={() => patchService(index, { notes: productClientInfo(product) })}>Rellenar desde catálogo</button>}</div>
