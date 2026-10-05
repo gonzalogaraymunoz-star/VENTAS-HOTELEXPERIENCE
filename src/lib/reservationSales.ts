@@ -38,6 +38,7 @@ export function reservationMissing(input: ReservationDraftInput) {
     if (!service.date) missing.push(`fecha de ${label}`);
     if (!(Number(service.pax) > 0)) missing.push(`cantidad de ${label}`);
     if (!(Number(service.unit_price) > 0)) missing.push(`precio de ${label}`);
+    if (!service.product_id && !service.operation_list_template_key) missing.push(`lista operacional de ${label}`);
   });
 
   if (input.checkin && input.checkout && input.checkout < input.checkin) missing.push('salida posterior al arribo');
@@ -83,6 +84,7 @@ function buildPayload(input: ReservationDraftInput) {
       supplier_id: service.supplier_id || null,
       supplier_name: service.supplier_name || null,
       notes: service.notes || null,
+      operation_list_template_key: service.operation_list_template_key || null,
       departure_id:service.departure_id||null,
     };
   });
