@@ -70,3 +70,7 @@ export async function archiveReservationSnapshot(operationsUrl:string,leadId:str
 export async function archivePassengerSnapshot(operationsUrl:string,leadId:string){
   return callArchive(operationsUrl,{action:'passenger_snapshot',leadId});
 }
+
+export async function prepareReservationRiskSheets(operationsUrl:string,leadId:string){
+  return callArchive(operationsUrl,{action:'prepare_risk_sheets',leadId});
+}
