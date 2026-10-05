@@ -12,8 +12,9 @@ import {
   createQuoteSnapshot, itineraryText, loadLatestQuote, markQuoteStatus, sendItineraryEmail,
   sharePaymentLink, updateSalesFlow,
 } from '../lib/salesFlow';
-import { concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib/customerQuote';
-import { downloadCustomerItinerary } from '../lib/customerItinerary';
+import { buildCustomerQuotePdf, concisePolicy, downloadCustomerQuote, shareCustomerQuote } from '../lib/customerQuote';
+import { buildCustomerItineraryPdf, downloadCustomerItinerary } from '../lib/customerItinerary';
+import { archiveLink, archivePassengerSnapshot, archivePdf, archiveReservationSnapshot, ensureReservationArchive } from '../lib/reservationArchive';
 import type {
   HotelPartner, Lead, LeadService, OperationListSite, PassengerDraft, Product, Profile, SalesQuoteSnapshot,
   SellerProfile, ServiceDraft, SellableTourDeparture, Supplier,
@@ -380,6 +381,7 @@ export default function SalesFlowForm({
     }
     await persistOperationalPassengerData(id, passengers, draftServices);
     await updateSalesFlow(id, { ...metadata(stage), sales_stage: stage });
+    if (operationsUrl) await ensureReservationArchive(operationsUrl, id).catch(error => console.warn('Reserva sin carpeta Drive todavía', error));
     if (!silent) setMessage(`Ingreso ${leadCode || reference} guardado sin enviar a Operaciones.`);
     await onSaved();
     return id;
@@ -398,8 +400,13 @@ export default function SalesFlowForm({
       const id = await persist('data_capture', true);
       const generated = await createQuoteSnapshot(id);
       setQuote(generated); setActiveStep(2);
-      downloadCustomerQuote(generated, { hotelName: hotel?.name, clientName: passengers[0]?.full_name || reference });
-      setMessage(`${generated.quote_code} creada desde este mismo ingreso.`);
+      const quoteOptions={ hotelName: hotel?.name, clientName: passengers[0]?.full_name || reference };
+      downloadCustomerQuote(generated, quoteOptions);
+      if(operationsUrl){
+        const pdf=buildCustomerQuotePdf(generated,quoteOptions);
+        await archivePdf({operationsUrl,leadId:id,documentType:'quote_pdf',title:`Cotización · ${generated.quote_code}`,category:'quote',fileName:pdf.fileName,doc:pdf.doc}).catch(error=>console.warn('Cotización sin respaldo central',error));
+      }
+      setMessage(`${generated.quote_code} creada desde este mismo ingreso y vinculada a su ficha documental.`);
       await onSaved();
     } catch (error: any) { setMessage(error?.message || 'No se pudo crear la cotización.'); }
     finally { setBusy(false); }
@@ -443,6 +450,7 @@ export default function SalesFlowForm({
       const id = await persist('accepted_payment', true);
       const result = await sharePaymentLink(reference, paymentLink);
       await updateSalesFlow(id, { ...metadata('payment_link_sent'), payment_coordination_status: 'link_sent', mark_payment_link_sent: true });
+      if(operationsUrl)await archiveLink({operationsUrl,leadId:id,documentType:'payment_link',title:`Link de pago · ${reference||leadCode}`,category:'payment',url:paymentLink}).catch(error=>console.warn('Link de pago sin respaldo central',error));
       setPaymentCoordination('link_sent');
       setActiveStep(4);
       setMessage(result === 'shared' ? 'Link de pago compartido y registrado.' : 'Link copiado y registrado como entregado.');
@@ -482,16 +490,25 @@ export default function SalesFlowForm({
     });
   }
 
-  function downloadItineraryPdf() {
+  function itineraryPdfInput() {
     const servicesForPdf = draftServices.map(service => {
       const product = products.find(item => item.id === service.product_id);
       return { ...service, durationHours: product?.duration_hours, scheduleLabel: product?.schedule };
     });
-    const fileName = downloadCustomerItinerary({
-      reference, leadCode, hotelName: hotel?.name, pickupLocation, arrivalFlight, departureFlight,
-      passengers, services: servicesForPdf,
-    });
-    setMessage(`${fileName} descargado. Descargar el PDF no registra el itinerario como enviado.`);
+    return {reference,leadCode,hotelName:hotel?.name,pickupLocation,arrivalFlight,departureFlight,passengers,services:servicesForPdf};
+  }
+
+  async function archiveCurrentItinerary(id:string) {
+    if(!operationsUrl)return null;
+    const pdf=buildCustomerItineraryPdf(itineraryPdfInput());
+    return archivePdf({operationsUrl,leadId:id,documentType:'itinerary_pdf',title:`Itinerario · ${reference||leadCode}`,category:'itinerary',fileName:pdf.fileName,doc:pdf.doc});
+  }
+
+  async function downloadItineraryPdf() {
+    const input=itineraryPdfInput();
+    const fileName = downloadCustomerItinerary(input);
+    if(leadId)await archiveCurrentItinerary(leadId).catch(error=>console.warn('Itinerario sin respaldo central',error));
+    setMessage(`${fileName} descargado y vinculado a la ficha documental. Descargarlo no lo registra como enviado al pasajero.`);
   }
 
   async function sendItinerary() {
@@ -505,7 +522,8 @@ export default function SalesFlowForm({
         body: itineraryBody(), reference, leadCode,
       });
       await updateSalesFlow(id, { ...metadata('ready_to_complete'), mark_itinerary_sent: true, itinerary_sent_via: 'email' });
-      setActiveStep(5); setMessage('Itinerario enviado al pasajero y registrado.'); await onSaved();
+      await archiveCurrentItinerary(id).catch(error=>console.warn('Itinerario enviado sin respaldo central',error));
+      setActiveStep(5); setMessage('Itinerario enviado al pasajero y vinculado a su ficha documental.'); await onSaved();
     } catch (error: any) { setMessage(error?.message || 'No se pudo enviar el itinerario.'); }
     finally { setBusy(false); }
   }
@@ -516,7 +534,8 @@ export default function SalesFlowForm({
     try {
       await persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : 'payment_coordinated', true);
       await updateSalesFlow(leadId, { ...metadata('ready_to_complete'), mark_itinerary_sent: true, itinerary_sent_via: 'externo' });
-      setActiveStep(5); setMessage('Envío externo del itinerario registrado.'); await onSaved();
+      await archiveCurrentItinerary(leadId).catch(error=>console.warn('Itinerario externo sin respaldo central',error));
+      setActiveStep(5); setMessage('Envío externo del itinerario registrado y vinculado a su ficha documental.'); await onSaved();
     } catch (error: any) { setMessage(error?.message || 'No se pudo registrar el envío.'); }
     finally { setBusy(false); }
   }
@@ -547,7 +566,12 @@ export default function SalesFlowForm({
       const id = await persist('ready_to_complete', true);
       await confirmReservation(id);
       await updateSalesFlow(id, { ...metadata('completed'), mark_completed: true });
-      setMessage('Reserva completada. El mismo registro quedó entregado a HOTEL EXPERIENCE Operaciones.');
+      if(operationsUrl){
+        await ensureReservationArchive(operationsUrl,id).catch(error=>console.warn('Carpeta Drive pendiente',error));
+        await archiveReservationSnapshot(operationsUrl,id).catch(error=>console.warn('Ficha de reserva sin respaldo central',error));
+        await archivePassengerSnapshot(operationsUrl,id).catch(error=>console.warn('Antecedentes pax sin respaldo central',error));
+      }
+      setMessage('Reserva completada. El mismo registro quedó entregado a Operaciones con ficha y antecedentes vinculados.');
       await onCompleted();
     } catch (error: any) { setMessage(error?.message || 'No se pudo completar la reserva.'); }
     finally { setBusy(false); }
@@ -629,7 +653,7 @@ export default function SalesFlowForm({
           <div className="quote-product-total"><span>Total servicio · {service.pax} pax</span><strong>{clp(calc.total)}</strong></div>
         </article>;
       })}</div>}
-      {quote && <section className="quote-document-status"><div><FileText size={20}/><span><strong>{quote.quote_code}</strong><small>Versión {quote.version} · {quote.status}</small></span></div><div className="quote-policy-mini"><strong>Cancelación — resumen de la política vigente</strong>{concisePolicy(quote.policy_summary).slice(0, 5).map(item => <span key={item}>• {item}</span>)}</div><div className="top-actions"><button className="button ghost" onClick={() => downloadCustomerQuote(quote, { hotelName: hotel?.name, clientName: passengers[0]?.full_name || reference })}><Download size={15}/> PDF</button><button className="button dark" disabled={busy} onClick={() => void shareQuote()}><Send size={15}/> Compartir</button>{!quoteSent && <button className="button ghost" disabled={busy} onClick={() => void markSent()}>Registrar enviada</button>}</div></section>}
+      {quote && <section className="quote-document-status"><div><FileText size={20}/><span><strong>{quote.quote_code}</strong><small>Versión {quote.version} · {quote.status}</small></span></div><div className="quote-policy-mini"><strong>Cancelación — resumen de la política vigente</strong>{concisePolicy(quote.policy_summary).slice(0, 5).map(item => <span key={item}>• {item}</span>)}</div><div className="top-actions"><button className="button ghost" onClick={() => void (async()=>{const options={hotelName:hotel?.name,clientName:passengers[0]?.full_name||reference};downloadCustomerQuote(quote,options);if(operationsUrl&&leadId){const pdf=buildCustomerQuotePdf(quote,options);await archivePdf({operationsUrl,leadId,documentType:'quote_pdf',title:`Cotización · ${quote.quote_code}`,category:'quote',fileName:pdf.fileName,doc:pdf.doc}).catch(error=>console.warn('Cotización sin respaldo central',error));}setMessage('PDF descargado y vinculado a la ficha documental.');})()}><Download size={15}/> PDF</button><button className="button dark" disabled={busy} onClick={() => void shareQuote()}><Send size={15}/> Compartir</button>{!quoteSent && <button className="button ghost" disabled={busy} onClick={() => void markSent()}>Registrar enviada</button>}</div></section>}
       <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={() => void persist('data_capture')}>Guardar productos</button><button className="button dark big" disabled={busy || !draftServices.length} onClick={() => void generateQuote()}>{quote ? 'Crear nueva versión' : 'Crear carta cotización'} <FileText size={16}/></button>{quoteSent && !quoteAccepted && <button className="button dark big" disabled={busy} onClick={() => void acceptQuote()}><CheckCircle2 size={16}/> Cliente acepta</button>}</div>
     </section>}
 
