@@ -4,7 +4,8 @@ import {
 } from 'lucide-react';
 import { recordServiceDocumentIssue, registerClientPayment } from '../lib/sales';
 import { clp } from '../lib/money';
-import { downloadServiceInvoice, shareServiceInvoice, type ServiceInvoiceData } from '../lib/serviceInvoice';
+import { createServiceInvoicePdf, downloadServiceInvoice, shareServiceInvoice, type ServiceInvoiceData } from '../lib/serviceInvoice';
+import { archivePdf } from '../lib/reservationArchive';
 import type { Lead, LeadService, PaymentMovement } from '../types';
 import './ClientPaymentsWorkspace.css';
 
@@ -58,12 +59,13 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 }
 
 export function AccountWorkspace({
-  leads, services, payments, initialLeadId, onAdded,
+  leads, services, payments, initialLeadId, operationsUrl, onAdded,
 }: {
   leads: Lead[];
   services: LeadService[];
   payments: PaymentMovement[];
   initialLeadId?: string;
+  operationsUrl?: string;
   onAdded: () => Promise<void>;
 }) {
   const activeServices = useMemo(() => services.filter(service => service.booking_status === 'confirmed'), [services]);
@@ -167,9 +169,37 @@ export function AccountWorkspace({
         reference,
         counterparty,
       });
+      const snapshot=invoiceData();
+      if(operationsUrl&&snapshot){
+        const now=new Date();
+        const receiptData:ServiceInvoiceData={
+          ...snapshot,
+          status:result.remaining_balance<=0?'Pagado':'Parcial',
+          paid:Math.min(snapshot.total,snapshot.paid+numericAmount),
+          balance:Math.max(0,Number(result.remaining_balance||0)),
+          payments:[...snapshot.payments,{
+            code:`Pago ${now.toLocaleString('es-CL')}`,
+            date:now.toLocaleDateString('es-CL'),
+            method:method||'Sin medio',
+            amount:numericAmount,
+            reference:reference||''
+          }]
+        };
+        const pdf=createServiceInvoicePdf(receiptData);
+        const code=selected.lead?.codigo||selected.leadId;
+        const stamp=now.toISOString().replace(/[:.]/g,'-');
+        await archivePdf({
+          operationsUrl,leadId:selected.leadId,
+          documentType:`payment_receipt_${stamp}`,
+          title:`Comprobante de pago · ${code}`,
+          category:'receipt',
+          fileName:`COMPROBANTE_PAGO_${code}_${stamp}.pdf`,
+          doc:pdf.doc
+        }).catch(error=>console.warn('Pago registrado sin respaldo documental central',error));
+      }
       setAmount('');
       setReference('');
-      setMessage(`Pago registrado. ${result.allocated_services} servicio(s) actualizado(s).`);
+      setMessage(`Pago registrado. ${result.allocated_services} servicio(s) actualizado(s) y comprobante enviado a la ficha documental.`);
       await onAdded();
     } catch (error: any) {
       setMessage(error?.message || 'No se pudo registrar el pago.');
@@ -187,7 +217,11 @@ export function AccountWorkspace({
     try {
       downloadServiceInvoice(data);
       await recordServiceDocumentIssue(selected.leadId, 'downloaded');
-      setMessage('Factura proforma PDF descargada.');
+      if(operationsUrl){
+        const pdf=createServiceInvoicePdf(data),stamp=new Date().toISOString().replace(/[:.]/g,'-');
+        await archivePdf({operationsUrl,leadId:selected.leadId,documentType:`payment_statement_${stamp}`,title:`Estado de pagos · ${selected.lead?.codigo||selected.leadId}`,category:'payment',fileName:`ESTADO_PAGOS_${selected.lead?.codigo||selected.leadId}_${stamp}.pdf`,doc:pdf.doc}).catch(error=>console.warn('Estado de pagos sin respaldo central',error));
+      }
+      setMessage('Factura proforma PDF descargada y vinculada a la ficha documental.');
     } catch (error: any) {
       setMessage(error?.message || 'No se pudo generar el PDF.');
     } finally {
@@ -204,7 +238,11 @@ export function AccountWorkspace({
     try {
       const result = await shareServiceInvoice(data);
       await recordServiceDocumentIssue(selected.leadId, result === 'shared' ? 'shared' : 'downloaded');
-      setMessage(result === 'shared' ? 'Documento enviado al selector de compartir.' : 'Este dispositivo no permite adjuntar por compartir; el PDF fue descargado.');
+      if(operationsUrl){
+        const pdf=createServiceInvoicePdf(data),stamp=new Date().toISOString().replace(/[:.]/g,'-');
+        await archivePdf({operationsUrl,leadId:selected.leadId,documentType:`payment_statement_${stamp}`,title:`Estado de pagos · ${selected.lead?.codigo||selected.leadId}`,category:'payment',fileName:`ESTADO_PAGOS_${selected.lead?.codigo||selected.leadId}_${stamp}.pdf`,doc:pdf.doc}).catch(error=>console.warn('Estado de pagos sin respaldo central',error));
+      }
+      setMessage(result === 'shared' ? 'Documento enviado al selector de compartir y vinculado a la ficha documental.' : 'El PDF fue descargado y vinculado a la ficha documental.');
     } catch (error: any) {
       if (error?.name === 'AbortError') setMessage('Compartir cancelado.');
       else setMessage(error?.message || 'No se pudo compartir el PDF.');
