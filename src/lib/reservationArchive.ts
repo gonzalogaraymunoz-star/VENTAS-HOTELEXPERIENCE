@@ -41,6 +41,19 @@ export async function archivePdf(input:{
   });
 }
 
+export async function archiveFile(input:{
+  operationsUrl:string;leadId:string;documentType:string;title:string;category:string;file:File;sourceApp?:string;
+}){
+  if(!input.leadId||!input.file)return null;
+  if(input.file.size>9*1024*1024)throw new Error('El comprobante supera el máximo de 9 MB.');
+  const arrayBuffer=await input.file.arrayBuffer();
+  return callArchive(input.operationsUrl,{
+    action:'store_file',leadId:input.leadId,documentType:input.documentType,title:input.title,category:input.category,
+    fileName:input.file.name||input.title,mimeType:input.file.type||'application/octet-stream',
+    base64:base64FromArrayBuffer(arrayBuffer),sourceApp:input.sourceApp||'link_ventas'
+  });
+}
+
 export async function archiveLink(input:{
   operationsUrl:string;leadId:string;documentType:string;title:string;category:string;url:string;sourceApp?:string;
 }){
