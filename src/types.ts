@@ -157,6 +157,7 @@ export type LeadService = {
   tour_id?: string | null;
   hora_inicio?: string | null;
   operation_ready_at?: string | null;
+  operation_list_template_key?: string | null;
   departure_id?:string|null;
   tax_treatment_snapshot?: string | null;
   tax_rate_snapshot?: number | null;
@@ -198,10 +199,20 @@ export type ServiceDraft = {
   hotel_commission_pct: number;
   seller_commission_pct: number;
   notes: string;
+  operation_list_template_key?: string;
   passenger_indexes?: number[];
   departure_id?: string;
   departure_code?: string;
   departure_capacity?: number | null;
+};
+
+export type OperationListSite = {
+  template_key: string;
+  display_name: string;
+  site_name: string;
+  description?: string | null;
+  sort_order: number;
+  active: boolean;
 };
 
 export type SellableTourDeparture = {
