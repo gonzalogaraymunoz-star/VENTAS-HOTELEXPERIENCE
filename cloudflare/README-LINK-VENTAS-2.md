@@ -83,3 +83,17 @@ Los 74 registros de `product_catalog` del proyecto original **ya tienen** identi
 7. Visión de datos limitada por página (`250` leads, `150` solicitudes, `500` cobros), aún sin paginación avanzada.
 
 **Ley del No Fake:** los datos reales solo se guardan en Supabase tras autenticación y acción humana. El modo DEMO es simulado y no guarda información en producción.
+
+
+## Diseño y usabilidad v2.1 · octubre de 2026
+
+Inspiración visual aportada por el usuario: dashboard de gestión compacto (celdas modulares, barra de iconos de grafito, tarjetas blanco cálido, acentos chartreuse, tipografía fuerte, indicadores en cápsulas).
+
+- **Panel de inicio rediseñado:** cifras dinámicas (solicitudes por revisar, oportunidades en gestión, ventas aceptadas), vista de etapas actualizadas sin inventar tasas de conversión, accesos rápidos a acciones críticas, últimas oportunidades, cobros manuales por moneda y catálogo.
+- **Escritorio:** barra lateral oscura compacta con iconografía vectorial y títulos, encabezado con negocio activo y enlace LINK ID.
+- **Móvil:** navegación inferior en cinco acciones (Inicio, Adquisición, Ventas, Productos, Más), menú Más para Fuentes y Accesos, tarjetas en cuadrícula flexible, barras legibles, modales tipo hoja inferior.
+- **Accesibilidad:** controles táctiles, etiquetas de navegación, foco visible y menos movimiento cuando el sistema solicita reducir animaciones.
+- **Ley del No Fake:** los gráficos solo incluyen valores presentes en Supabase o datos explícitamente rotulados como DEMO. Los cobros verificados manualmente se distinguen de ventas aceptadas.
+- **Impacto:** frontend UI y navegación; no cambió la lógica de las cinco RPC comerciales ni la integración de adquisición o LINK ID.
+
+Verificación realizada: sintaxis de JS del cliente y Worker aprobada; despliegue Worker realizado. Servicio de browser rendering Cloudflare logró cargar la demo y reconocer `.dash-top-grid` en viewport móvil; segunda solicitud de screenshot alcanzó límite temporal de API, por lo cual no se garantiza inspección visual completa en todos los dispositivos.
