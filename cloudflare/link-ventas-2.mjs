@@ -27,7 +27,7 @@ async function receiveWebsite(request){
 }
 
 // LINK Ventas + LINK ID — Individual AI/LLM API v2. Authenticated exclusively by personal secret in Bearer header.
-const JSON_HEADERS={"Content-Type":"application/json;charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Access-Control-Allow-Origin":"null"};
+const JSON_HEADERS={"Content-Type":"application/json;charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer" };
 function apiJson(value,status=200){return new Response(JSON.stringify(value),{status,headers:JSON_HEADERS})}
 function apiKeyOf(request){const h=request.headers.get("Authorization")||"";const m=/^Bearer (lvs_[a-f0-9]{64})$/i.exec(h);return m?m[1]:null}
 function apiRequestIsSafe(request){return request.method==="POST" && !(request.headers.get("Origin")) && String(request.headers.get("Content-Type")||"").toLowerCase().startsWith("application/json")}
@@ -107,11 +107,17 @@ async function personalMcpFetch(request){
  if(!input||typeof input!=="object"||Array.isArray(input))return apiJson(rpcError(null,-32600,"Objeto JSON-RPC requerido"),400);
  if(input.method==="notifications/initialized")return new Response(null,{status:202,headers:{"Cache-Control":"no-store"}});
  const id=input.id??null;
- if(input.method==="initialize")return apiJson(rpcReply(id,{
-   protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"LINK Ventas + LINK ID",version:"1.0.0"}
- }));
+ if(input.method==="initialize"){
+   const checked=await executePersonalApi(request,"whoami",{});
+   if(checked.error)return apiJson(rpcError(id,-32001,checked.error),checked.status);
+   return apiJson(rpcReply(id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"LINK Ventas + LINK ID",version:"1.0.0"}}));
+ }
  if(input.method==="ping")return apiJson(rpcReply(id,{}));
- if(input.method==="tools/list")return apiJson(rpcReply(id,{tools:mcpToolsList()}));
+ if(input.method==="tools/list"){
+   const checked=await executePersonalApi(request,"whoami",{});
+   if(checked.error)return apiJson(rpcError(id,-32001,checked.error),checked.status);
+   return apiJson(rpcReply(id,{tools:mcpToolsList()}));
+ }
  if(input.method==="tools/call"){
   const t=MCP_TOOLS.find(x=>x[0]===input.params?.name);
   if(!t)return apiJson(rpcError(id,-32602,"Herramienta no registrada"));
@@ -128,7 +134,7 @@ const API_OPENAPI={
  openapi:"3.1.0",info:{title:"LINK Ventas + LINK ID — API",version:"1.0.0",description:"API comercial multiusuario. Cada token pertenece a un usuario y negocio, con permisos read, intake, sales y linkid:read."},
  servers:[{url:"https://link-ventas-2.gonzalogaraymunoz.workers.dev"}],
  components:{securitySchemes:{personalToken:{type:"http",scheme:"bearer",description:"Clave generada personalmente en LINK Ventas → API y LLM"}}},
- paths:{"/api/v1":{post:{summary:"Ejecutar una acción autorizada por usuario y negocio",security:[{personalToken:[]}],requestBody:{required:true,content:{"application/json":{schema:{type:"object",required:["action"],properties:{action:{type:"string",enum:["dashboard","requests","products","leads","linkid_overview","linkid_search_people","linkid_get_person","linkid_resolve_contact","identity_preview","receive_request","convert_request","create_product","update_product","set_stage","quote","accept_sale","mark_ready","feed_status"]},data:{type:"object"}}}}}},responses:{"200":{description:"Respuesta operativa"},"401":{description:"Clave inválida"},"403":{description:"Permiso no autorizado"},"429":{description:"Límite por minuto excedido"}}}}},
+ paths:{"/api/v1":{post:{summary:"Ejecutar una acción autorizada por usuario y negocio",security:[{personalToken:[]}],requestBody:{required:true,content:{"application/json":{schema:{type:"object",required:["action"],properties:{action:{type:"string",enum:["whoami","dashboard","requests","products","leads","linkid_overview","linkid_search_people","linkid_get_person","linkid_resolve_contact","identity_preview","receive_request","convert_request","create_product","update_product","set_stage","quote","accept_sale","mark_ready","feed_status"]},data:{type:"object"}}}}}},responses:{"200":{description:"Respuesta operativa"},"401":{description:"Clave inválida"},"403":{description:"Permiso no autorizado"},"429":{description:"Límite por minuto excedido"}}}}},
  "/mcp":{post:{summary:"Servidor MCP remoto con las herramientas de LINK Ventas y LINK ID",security:[{personalToken:[]}],responses:{"200":{description:"Respuesta MCP JSON-RPC"}}}}
  };
 
