@@ -225,3 +225,72 @@ REVOKE ALL ON FUNCTION public.link_sales_api_execute(text,text,jsonb) FROM PUBLI
 GRANT EXECUTE ON FUNCTION public.link_sales_api_execute(text,text,jsonb) TO anon;
 REVOKE ALL ON FUNCTION public.link_sales_linkid(text,jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.link_sales_linkid(text,jsonb) TO authenticated;
+
+-- Current gateway revision includes whoami for verified MCP handshake.
+CREATE OR REPLACE FUNCTION public.link_sales_api_execute(p_token text, p_action text, p_data jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'extensions'
+AS $function$
+DECLARE v_key public.link_sales_api_credentials%rowtype;v_role text;v_action text;v_scope text;v_data jsonb;
+ v_result jsonb;v_hit integer;
+BEGIN
+ IF p_token !~ '^lvs_[a-f0-9]{64}$' OR length(p_token)<>68 THEN RAISE EXCEPTION 'Clave no válida'; END IF;
+ IF jsonb_typeof(coalesce(p_data,'{}'::jsonb))<>'object' OR length(p_data::text)>18000
+   THEN RAISE EXCEPTION 'Datos no válidos'; END IF;
+ SELECT * INTO v_key FROM public.link_sales_api_credentials
+ WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex')
+  AND status='active' AND expires_at>now();
+ IF NOT FOUND THEN RAISE EXCEPTION 'Clave expirada, revocada o incorrecta'; END IF;
+ SELECT role INTO v_role FROM public.link_sales_members
+ WHERE business_id=v_key.business_id AND user_id=v_key.created_by;
+ INSERT INTO public.link_sales_api_rate_window(key_id,period,calls)
+ VALUES(v_key.id,date_trunc('minute',now()),1)
+ ON CONFLICT (key_id,period) DO UPDATE SET calls=public.link_sales_api_rate_window.calls+1
+ RETURNING calls INTO v_hit;
+ IF v_hit>90 THEN RAISE EXCEPTION 'Límite de 90 llamadas por minuto para esta clave'; END IF;
+ IF v_role IS NULL THEN RAISE EXCEPTION 'El propietario ya no tiene acceso al negocio'; END IF;
+ v_action:=lower(btrim(coalesce(p_action,'')));
+ v_scope:=CASE WHEN v_action='whoami' THEN 'any' WHEN v_action IN ('dashboard','requests','identity_preview','feed_status','products','leads') THEN 'read'
+  WHEN v_action IN ('linkid_overview','linkid_search_people','linkid_get_person','linkid_resolve_contact') THEN 'linkid:read'
+  WHEN v_action IN ('receive_request','convert_request') THEN 'intake'
+  WHEN v_action IN ('create_product','update_product','set_stage','quote','accept_sale','mark_ready') THEN 'sales'
+  ELSE NULL END;
+ IF v_scope IS NULL OR (v_scope<>'any' AND NOT(v_scope=ANY(v_key.scopes))) THEN RAISE EXCEPTION 'Permiso insuficiente o acción no soportada'; END IF;
+ IF v_scope IN ('sales','intake') AND v_role='viewer' THEN RAISE EXCEPTION 'Rol solo lectura'; END IF;
+ IF (p_data ? 'business_id') AND nullif(p_data->>'business_id','') IS DISTINCT FROM v_key.business_id::text
+  THEN RAISE EXCEPTION 'La credencial pertenece a otro negocio'; END IF;
+ v_data:=p_data||jsonb_build_object('business_id',v_key.business_id);
+ -- Existing RPCs have ownership and RLS safeguards based on auth.uid(); set a trusted
+ -- local request identity after token verification. SET LOCAL has transaction scope.
+ PERFORM set_config('request.jwt.claim.sub',v_key.created_by::text,true);
+ IF v_action='whoami' THEN v_result:=jsonb_build_object('ok',true,'user_id',v_key.created_by,'business_id',v_key.business_id,
+   'scopes',v_key.scopes,'expires_at',v_key.expires_at);
+ ELSIF v_action IN ('dashboard','products','leads') THEN
+   v_result:=public.link_sales_portal('home',v_data);
+   IF v_action='products' THEN v_result:=jsonb_build_object('ok',true,'business_id',v_key.business_id,'items',coalesce(v_result->'items','[]'::jsonb));
+   ELSIF v_action='leads' THEN v_result:=jsonb_build_object('ok',true,'business_id',v_key.business_id,'leads',coalesce(v_result->'leads','[]'::jsonb)); END IF;
+ ELSIF v_scope='linkid:read' THEN v_result:=public.link_sales_linkid(substr(v_action,8),v_data);
+ ELSIF v_action='requests' THEN v_result:=public.link_sales_acquisition('list',v_data);
+ ELSIF v_action='identity_preview' THEN v_result:=public.link_sales_acquisition('identity_preview',v_data);
+ ELSIF v_action='feed_status' THEN v_result:=public.link_sales_feed_control('status',v_data);
+ ELSIF v_action='receive_request' THEN v_result:=public.link_sales_acquisition('receive',v_data);
+ ELSIF v_action='convert_request' THEN
+   IF (p_data->>'review_confirmed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Revisión humana obligatoria para adquirir'; END IF;
+   v_result:=public.link_sales_acquisition('convert',v_data);
+ ELSIF v_action IN ('create_product','update_product','set_stage','accept_sale','mark_ready') THEN
+   IF v_action='accept_sale' THEN
+     IF (p_data->>'human_confirmed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Confirmación humana del cierre obligatoria'; END IF;
+     v_result:=public.link_sales_portal('accept_quote',v_data);
+   ELSIF v_action='mark_ready' THEN
+     IF (p_data->>'human_confirmed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Confirmación humana de operaciones obligatoria'; END IF;
+     v_result:=public.link_sales_portal('mark_ready',v_data);
+   ELSE v_result:=public.link_sales_portal(v_action,v_data); END IF;
+ ELSIF v_action='quote' THEN v_result:=public.link_sales_quote_multi(v_data);
+ END IF;
+ UPDATE public.link_sales_api_credentials SET last_used_at=now(),used_count=used_count+1 WHERE id=v_key.id;
+ RETURN jsonb_build_object('ok',true,'action',v_action,'business_id',v_key.business_id,'data',v_result);
+END $function$;
+REVOKE ALL ON FUNCTION public.link_sales_api_execute(text,text,jsonb) FROM PUBLIC,authenticated;
+GRANT EXECUTE ON FUNCTION public.link_sales_api_execute(text,text,jsonb) TO anon;
