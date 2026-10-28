@@ -97,3 +97,18 @@ Inspiración visual aportada por el usuario: dashboard de gestión compacto (cel
 - **Impacto:** frontend UI y navegación; no cambió la lógica de las cinco RPC comerciales ni la integración de adquisición o LINK ID.
 
 Verificación realizada: sintaxis de JS del cliente y Worker aprobada; despliegue Worker realizado. Servicio de browser rendering Cloudflare logró cargar la demo y reconocer `.dash-top-grid` en viewport móvil; segunda solicitud de screenshot alcanzó límite temporal de API, por lo cual no se garantiza inspección visual completa en todos los dispositivos.
+
+
+## API personal para LLMs · v2.2
+
+Se agregó una **API unificada** de LINK Ventas y LINK ID. Cada usuario con membresía comercial puede generar, revisar y revocar sus propias claves Bearer en el nuevo módulo **API / LLM**. Las credenciales pertenecen al **usuario y al negocio**; ninguna clave permite cruzar empresas. Las herramientas están separadas por `read`, `intake`, `sales` y `linkid:read`, con máximo 90 días y 90 llamadas/minuto. Una cuenta con permiso `viewer` solo obtiene lectura, aunque intente crear permisos superiores.
+
+- `POST /api/v1`: acciones REST autorizadas.
+- `POST /mcp`: herramientas MCP para clientes que admiten credenciales Bearer en conexiones remotas.
+- `GET /openapi.json`: especificación pública de las rutas y requisitos de autorización.
+- SQL v6 `cloudflare/link-ventas-2-upgrade-v6-api-llm.sql`: claves, hash SHA-256, límites, API LINK ID y gateway.
+- Guía: `cloudflare/API-LLM-LINK-ID.md`.
+
+Las claves se muestran una vez, no se guardan en texto plano y nunca deben incluirse en el prompt de un LLM o en `mcp.json`. No se han generado credenciales de usuario reales automáticamente.
+
+**Estado de integración nativa en ChatGPT:** pendiente OAuth 2.1 + conexión de plugin, dado que la invocación `@LINK Ventas` no puede utilizar directamente una clave API personalizada. Los clientes LLM que admitan autenticación HTTP Bearer pueden integrar estas rutas. La versión se ha desplegado y se ha probado la lógica de permisos en SQL (pruebas revertidas), pero no se ha completado una prueba externa E2E con una clave real.
