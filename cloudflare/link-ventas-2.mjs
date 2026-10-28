@@ -138,9 +138,174 @@ const API_OPENAPI={
  "/mcp":{post:{summary:"Servidor MCP remoto con las herramientas de LINK Ventas y LINK ID",security:[{personalToken:[]}],responses:{"200":{description:"Respuesta MCP JSON-RPC"}}}}
  };
 
+
+// Authenticated native ChatGPT MCP — authorization server is Supabase OAuth 2.1.
+// One OAuth client/user can be linked to one explicitly selected business in LINK ID.
+const MCP_OAUTH_URL="https://link-ventas-2.gonzalogaraymunoz.workers.dev/mcp/oauth";
+const MCP_OAUTH_META="https://link-ventas-2.gonzalogaraymunoz.workers.dev/.well-known/oauth-protected-resource/mcp/oauth";
+const MCP_OAUTH_ISSUER="https://zgbnjlrxzvzpigmwidsp.supabase.co/auth/v1";
+const MCP_OAUTH_SCOPES=["openid","email","profile"];
+const MCP_OAUTH_PRM={resource:MCP_OAUTH_URL,authorization_servers:[MCP_OAUTH_ISSUER],scopes_supported:MCP_OAUTH_SCOPES,bearer_methods_supported:["header"],resource_documentation:"https://link-ventas-2.gonzalogaraymunoz.workers.dev/"};
+function nativeChallenge(error="invalid_token",description="Autoriza LINK Ventas con tu cuenta para continuar"){
+ return 'Bearer resource_metadata="'+MCP_OAUTH_META+'", scope="openid email profile", error="'+error+'", error_description="'+description+'"';
+}
+function oauthDenied(description="Inicia sesión con LINK Ventas"){
+ return new Response(JSON.stringify({error:"unauthorized",message:description}),{status:401,headers:{"WWW-Authenticate":nativeChallenge(),"Cache-Control":"no-store","Content-Type":"application/json","Access-Control-Allow-Origin":"*"}});
+}
+async function callNativeOAuth(jwt,action,args){
+ if(!jwt || jwt.length>7500 || jwt.split(".").length!==3)return {error:"Falta token OAuth válido",status:401};
+ const endpoint="https://zgbnjlrxzvzpigmwidsp.supabase.co/rest/v1/rpc/link_sales_mcp_execute";
+ try {
+  const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","apikey":PUBLIC_SUPABASE_KEY,"Authorization":"Bearer "+jwt},body:JSON.stringify({p_action:action,p_data:args||{}}),redirect:"error",signal:AbortSignal.timeout(13000)});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok){
+    const msg=String(data.message||"");
+    let status=/OAuth|cliente|autorizado|Sesión|revocado|negocio revocado|acceso al negocio/i.test(msg)?401:/Permiso|rol|Revisión humana|Confirmación humana/i.test(msg)?403:400;
+    if(r.status>=500)status=502;
+    const allow=/^(Se requiere|Sesión|ChatGPT|Acceso|Cliente|Permiso|Negocio|Rol|Revisión|Confirmación|Introduce|Solicitud|Formato|La solicitud|Producto|Demasiadas)/i.test(msg)&&msg.length<260&&!/[{}\n;]/.test(msg);
+    return {error:allow?msg:"Solicitud no autorizada o inválida",status};
+  }
+  return {data,status:200};
+ }catch(e){return {error:"LINK CONTROL CENTRAL no responde",status:503}}
+}
+function oauthToolList(){
+ const tools=[{name:"linkventas_mi_conexion",description:"Consultar el negocio y permisos autorizados para esta conexión ChatGPT.",inputSchema:{type:"object",properties:{},required:[],additionalProperties:false},annotations:{readOnlyHint:true},securitySchemes:[{type:"oauth2",scopes:["openid","email"]}]}];
+ return tools.concat(mcpToolsList().map(t=>({...t,annotations:{readOnlyHint:!["linkventas_recibir_solicitud","linkventas_convertir_solicitud","linkventas_crear_producto","linkventas_actualizar_etapa","linkventas_cotizar","linkventas_aceptar_venta","linkventas_listo_operar"].includes(t.name)},securitySchemes:[{type:"oauth2",scopes:["openid","email"]}]})));
+}
+async function nativeMcpFetch(request){
+ if(request.method==="GET")return new Response(null,{status:405,headers:{"Allow":"POST","Cache-Control":"no-store"}});
+ if(request.method!=="POST")return new Response(null,{status:405,headers:{"Allow":"POST"}});
+ if(!String(request.headers.get("Content-Type")||"").toLowerCase().includes("application/json"))return apiJson({error:"Se espera JSON-RPC"},415);
+ const bearer=/^Bearer (.+)$/i.exec(request.headers.get("Authorization")||"");
+ if(!bearer)return oauthDenied();
+ const jwt=bearer[1];
+ const bodyText=await request.text();
+ if(bodyText.length>18000)return apiJson(rpcError(null,-32600,"Solicitud demasiado grande"),413);
+ let input;try{input=JSON.parse(bodyText)}catch(e){return apiJson(rpcError(null,-32700,"JSON inválido"),400)}
+ if(!input || typeof input!=="object"||Array.isArray(input))return apiJson(rpcError(null,-32600,"JSON-RPC inválido"),400);
+ if(input.method==="notifications/initialized")return new Response(null,{status:202,headers:{"Cache-Control":"no-store"}});
+ const id=input.id??null;
+ if(input.method==="initialize"||input.method==="tools/list"||input.method==="ping"){
+   const check=await callNativeOAuth(jwt,"profile",{});
+   if(check.error)return check.status===401?oauthDenied(check.error):apiJson(rpcError(id,-32001,check.error),check.status);
+   if(input.method==="initialize")return apiJson(rpcReply(id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"LINK Ventas + LINK ID · OAuth",version:"2.3.0"}}));
+   if(input.method==="tools/list")return apiJson(rpcReply(id,{tools:oauthToolList()}));
+   return apiJson(rpcReply(id,{}));
+ }
+ if(input.method==="tools/call"){
+   const name=input.params?.name;
+   let action;
+   if(name==="linkventas_mi_conexion")action="profile";
+   else action=MCP_TOOLS.find(x=>x[0]===name)?.[1];
+   if(!action)return apiJson(rpcError(id,-32602,"Herramienta no reconocida"));
+   const args=input.params?.arguments||{};
+   if(args===null||typeof args!=="object"||Array.isArray(args))return apiJson(rpcError(id,-32602,"Argumentos inválidos"));
+   const missing=(MCP_REQUIRED[name]||[]).filter(k=>args[k]===null||args[k]===undefined);
+   if(missing.length)return apiJson(rpcError(id,-32602,"Faltan datos: "+missing.join(", ")));
+   const result=await callNativeOAuth(jwt,action,args);
+   if(result.error){
+     const challenge=result.status===401?nativeChallenge("insufficient_scope","Vuelve a conectar LINK Ventas para autorizar esta acción"):null;
+     return apiJson(rpcReply(id,{content:[{type:"text",text:result.error}],isError:true,...(challenge?{_meta:{"mcp/www_authenticate":[challenge]}}:{})}));
+   }
+   return apiJson(rpcReply(id,{content:[{type:"text",text:JSON.stringify(result.data)}],structuredContent:result.data,isError:false}));
+ }
+ return apiJson(rpcError(id,-32601,"Método no soportado"));
+}
+const CONSENT_HTML=String.raw`<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autorizar ChatGPT · LINK Ventas</title>
+<style>*,*:before,*:after{box-sizing:border-box}body{background:#eef1ec;color:#1b1c1c;font:15px system-ui,-apple-system,Arial,sans-serif;min-height:100vh;margin:0;display:grid;place-items:center;padding:24px}.shell{width:min(540px,100%);background:#fbf9f9;border-radius:25px;padding:32px;box-shadow:0 20px 55px #18241818}.top{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;letter-spacing:.6px}.mark{display:grid;place-items:center;background:#c8ff3d;width:37px;height:37px;border-radius:12px;font-size:24px}h1{font-size:29px;line-height:1.08;letter-spacing:-1px;margin:25px 0 11px}.muted{color:#6d776e;line-height:1.6}.card{border:1px solid #dfe7dc;background:#fff;padding:17px;border-radius:17px;margin:16px 0}.small{font-size:12px}.mono{font:12px ui-monospace,monospace;overflow-wrap:anywhere}label{display:block;font-size:12px;font-weight:750;margin:15px 0 6px}input:not([type=checkbox]),select{width:100%;border:1px solid #d9e3d6;padding:12px;border-radius:10px;background:white;font:inherit}button{cursor:pointer;border-radius:11px;border:1px solid #d9e3d6;background:white;padding:12px 18px;font-weight:800;font:inherit}button.primary{background:#c8ff3d;border-color:#c8ff3d}button:disabled{opacity:.45;cursor:not-allowed}.row{display:flex;gap:8px;flex-wrap:wrap}.row button{flex:1}.checks label{font-size:13px;font-weight:600;margin:12px 0;display:flex;align-items:center;gap:10px}.checks input{width:18px;height:18px;accent-color:#91c719}.status{margin:15px 0;padding:10px 12px;background:#f0f4ee;border-radius:10px;color:#495b4a}.hidden{display:none}footer{font-size:11px;color:#79847c;margin-top:20px;line-height:1.7}</style></head>
+<body><main class="shell"><div class="top"><span class="mark">L</span><span>LINK VENTAS <span style="font-weight:400">/ LINK ID</span></span></div><h1>Autorizar acceso a tu negocio</h1><p class="muted">Conecta ChatGPT con tu negocio mediante un permiso explícito. Tú decides qué información podrá consultar o modificar.</p><div id="status" class="status">Validando solicitud de autorización…</div>
+<section id="signin" class="hidden"><h3>Inicia sesión</h3><form id="login"><label>Correo</label><input id="email" type="email" required autocomplete="email"><label>Contraseña</label><input id="password" type="password" required autocomplete="current-password"><button class="primary" style="margin-top:17px;width:100%" type="submit">Entrar y revisar permisos</button></form></section>
+<section id="consent" class="hidden"><div class="card"><strong id="appname">ChatGPT</strong><p class="small muted">Aplicación solicitante</p><div class="mono" id="redirect"></div><p id="oauthScopes" class="small muted"></p></div>
+<label>Negocio al que podrá acceder</label><select id="business"></select>
+<p class="small muted">Solo podrá trabajar con el negocio seleccionado. El resto permanece aislado.</p>
+<div class="checks"><label><input type="checkbox" value="read" checked> Consultar ventas, productos y solicitudes</label><label><input type="checkbox" value="linkid:read" checked> Consultar identidades LINK ID vinculadas</label><label><input type="checkbox" value="intake"> Recibir solicitudes y convertirlas tras revisión</label><label><input type="checkbox" value="sales"> Editar productos, cotizar y gestionar ventas</label></div>
+<div class="row" style="margin-top:23px"><button type="button" id="deny">Rechazar</button><button type="button" class="primary" id="approve">Autorizar ChatGPT</button></div></section>
+<footer>El cierre comercial y la preparación operacional exigen confirmación humana. Puedes revocar los permisos desde LINK Ventas y desde tu cuenta. No compartas tu contraseña ni claves API con el modelo.</footer></main>
+<script type="module">
+import {createClient} from "https://esm.sh/@supabase/supabase-js@2";
+const url="https://zgbnjlrxzvzpigmwidsp.supabase.co",key="sb_publishable_RE_eqhBaLeaUMHuBjLUY2Q_OZNBm9_A";
+const api=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+const authId=new URLSearchParams(location.search).get("authorization_id");
+const $=id=>document.getElementById(id);
+let details;
+function status(t){$("status").textContent=t}
+function show(id,on){$(id).classList.toggle("hidden",!on)}
+async function loginFromExistingSession(){
+ try{const saved=JSON.parse(localStorage.getItem("link_sales_session")||"null");
+  if(saved?.access_token&&saved?.refresh_token){
+   const {error}=await api.auth.setSession({access_token:saved.access_token,refresh_token:saved.refresh_token});
+   if(!error)return true;
+  }
+ }catch(e){}
+ return false;
+}
+async function loadConsent(){
+ status("Validando sesión y solicitud OAuth…");
+ const {data:{user},error}=await api.auth.getUser();
+ if(error||!user){show("signin",true);show("consent",false);status("Inicia sesión con la misma cuenta de LINK Ventas.");return}
+ const response=await api.auth.oauth.getAuthorizationDetails(authId);
+ if(response.error||!response.data)throw Error(response.error?.message||"La solicitud OAuth no está disponible; comprueba la configuración en Supabase.");
+ details=response.data;
+ if(details.redirect_url&&!details.authorization_id){
+    // Supabase already holds a client consent; still require local business approval.
+    status("Consentimiento OAuth previo detectado. Verifica permisos comerciales en LINK Ventas.");
+    throw Error("Esta conexión ya tiene consentimiento OAuth; revoca el consentimiento previo y vuelve a conectar para seleccionar el negocio.");
+ }
+ const client=details.client||{};
+ const clientName=String(client.client_name||client.clientName||client.name||"Cliente OAuth");
+ $("appname").textContent=clientName;
+ $("redirect").textContent=String(details.redirect_uri||details.redirectUri||"");
+ $("oauthScopes").textContent="Permisos de identidad solicitados: "+String(details.scope||"email");
+ const {data:biz,error:bizErr}=await api.rpc("link_sales_mcp_consent",{p_action:"businesses",p_data:{}});
+ if(bizErr)throw bizErr;
+ const businessList=biz.businesses||[];
+ if(!businessList.length)throw Error("Tu cuenta aún no tiene negocios autorizados en LINK Ventas.");
+ $("business").replaceChildren(...businessList.map(b=>{const opt=document.createElement("option");opt.value=b.id;opt.textContent=b.name+" · "+b.role;return opt}));
+ show("signin",false);show("consent",true);status("Solicitud válida. Elige un negocio y los permisos que deseas conceder.");
+}
+$("login").addEventListener("submit",async event=>{
+ event.preventDefault();status("Iniciando sesión…");
+ const {data,error}=await api.auth.signInWithPassword({email:$("email").value,password:$("password").value});
+ if(error){status("No se pudo iniciar sesión. Comprueba las credenciales.");return}
+ // Share valid existing user session with LINK Ventas on same origin.
+ if(data.session)localStorage.setItem("link_sales_session",JSON.stringify(data.session));
+ try{await loadConsent()}catch(e){status(e.message)}
+});
+$("approve").onclick=async()=>{
+ const client=details?.client||{};
+ const clientId=client.client_id||client.clientId||client.id;
+ const scopes=Array.from(document.querySelectorAll('.checks input:checked')).map(x=>x.value);
+ if(!clientId||!scopes.length){status("Falta cliente registrado o permiso seleccionado.");return}
+ $("approve").disabled=true;
+ try{
+  const {error}=await api.rpc("link_sales_mcp_consent",{p_action:"approve",p_data:{client_id:clientId,business_id:$("business").value,scopes}});
+  if(error)throw error;
+  const result=await api.auth.oauth.approveAuthorization(authId);
+  if(result.error||!result.data?.redirect_url)throw result.error||new Error("No se recibió la redirección de autorización.");
+  // Only the OAuth authority provides this redirect URL; never accept caller-supplied redirects.
+  location.assign(result.data.redirect_url);
+ }catch(e){status(e.message||"No fue posible autorizar.");$("approve").disabled=false}
+};
+$("deny").onclick=async()=>{
+ status("Rechazando autorización…");
+ const result=await api.auth.oauth.denyAuthorization(authId);
+ if(result.data?.redirect_url)location.assign(result.data.redirect_url);
+ else status(result.error?.message||"Solicitud rechazada");
+};
+if(!authId||!/^[0-9a-f-]{20,80}$/i.test(authId)){status("Solicitud OAuth inválida: falta authorization_id.");}
+else{await loginFromExistingSession();try{await loadConsent()}catch(e){status(e.message)}}
+</script></body></html>`;
+function oauthConsentPage(){
+ return new Response(CONSENT_HTML,{status:200,headers:{"Content-Type":"text/html;charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Content-Security-Policy":"default-src 'none'; connect-src https://zgbnjlrxzvzpigmwidsp.supabase.co https://esm.sh; script-src 'unsafe-inline' https://esm.sh; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
+}
+
 export default {
  async fetch(request){
   const path=new URL(request.url).pathname;
+  if(path==="/oauth/consent"&&request.method==="GET")return oauthConsentPage();
+  if((path==="/.well-known/oauth-protected-resource/mcp/oauth"||path==="/.well-known/oauth-protected-resource")&&request.method==="GET")return apiJson(MCP_OAUTH_PRM);
+  if(path==="/mcp/oauth")return nativeMcpFetch(request);
   if(path==="/api/v1")return personalApiFetch(request);
   if(path==="/mcp")return personalMcpFetch(request);
   if(path==="/openapi.json"&&request.method==="GET")return apiJson(API_OPENAPI);
