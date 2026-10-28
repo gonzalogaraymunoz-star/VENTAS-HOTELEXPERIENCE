@@ -16,7 +16,7 @@ Un negocio puede dar de alta sus productos, recibir conversaciones de clientes, 
 
 ### Módulos
 - **Mi negocio:** indicadores, solicitudes por atender, ventas aceptadas y cobros verificados agrupados por moneda.
-- **Adquisición:** bandeja de solicitudes originales (canal, referencia, deduplicación), reglas de extracción ES/PT/EN, evidencias verificables, revisión humana, comparación por contacto con LINK ID y vinculación a lead abierto en el mismo negocio.
+- **Adquisición:** bandeja de solicitudes originales (canal, referencia, deduplicación), reglas de extracción ES/PT/EN, evidencias verificables, revisión humana, comparación por contacto con LINK ID y vinculación a lead abierto en el mismo negocio. Incluye importación **bajo demanda** de mensajes entrantes comerciales desde LINKRRSS, sin convertirlos automáticamente.
 - **Ventas:** oportunidades, calificación, seguimiento comercial, cotizaciones de 1–20 productos, cierres confirmados.
 - **Productos:** catálogo propio del negocio; altas y ediciones con `LNK-PRD-*` de `ecosystem_entities`. Índice único por nombre normalizado dentro de cada negocio.
 - **Cobros:** abonos reportados, verificación **humana** de referencias y anulación auditable. No hay conciliación con banco/proveedor ni captura de fondos.
@@ -43,13 +43,15 @@ Los 74 registros de `product_catalog` del proyecto original **ya tienen** identi
 - `link_sales_quote_multi(jsonb)` para cotización de varios productos.
 - `link_sales_access(text,jsonb)` para solicitudes y aprobaciones.
 - `link_sales_payments(text,jsonb)` para registro, verificación, consulta y anulación de pagos reportados.
+- `link_sales_rrss(text,jsonb)` para descubrir candidatos comerciales LINKRRSS y copiar *solo el texto/evidencia de entrada a la bandeja* tras acción explícita de un miembro del negocio.
 
 **Seguridad:** RLS en tablas nuevas, rol anon sin acceso directo de escritura, `service_role` jamás en el navegador. Las RPC son `SECURITY DEFINER` intencionalmente para escribir en las tablas originales con restricciones internas por sesión y pertenencia al negocio. La auditoría de Supabase emite WARN por esas funciones públicas ejecutables por `authenticated`: el aviso es conocido y requiere revisión continua; no es una certificación de seguridad completa. No se entregan datos de contactos ajenos a un negocio. Las acciones que cierran una venta o verifican un cobro requieren confirmación humana.
 
 ## Código
 - `cloudflare/link-ventas-2.mjs`: HTML + frontend + Worker de Cloudflare desplegado.
 - `cloudflare/link-ventas-2-migration.sql`: versión inicial aplicada anteriormente.
-- `cloudflare/link-ventas-2-upgrade-v3.sql`: upgrade de aduana, producto, cotización, permisos, pagos y todas las RPC vigentes extraídas desde la DB.
+- `cloudflare/link-ventas-2-upgrade-v3.sql`: upgrade de aduana, producto, cotización, permisos y pagos.
+- `cloudflare/link-ventas-2-upgrade-v4.sql`: definiciones vigentes de la aduana y el importador de LINKRRSS, conservando los metadatos de origen al convertir.
 
 ### Verificaciones efectuadas
 - Worker subido a Cloudflare y publicado en `workers.dev`, despliegue con éxito.
@@ -58,11 +60,12 @@ Los 74 registros de `product_catalog` del proyecto original **ya tienen** identi
 - Verificada existencia de tablas y RPC de pagos y solicitudes de acceso. Aún no se ha completado test E2E autenticado desde navegador ni reconciliación bancaria.
 
 ## Limitaciones explícitas
-1. **No hay ingestión automática real** de WhatsApp, Instagram, Gmail ni páginas externas: el usuario ingresa/copia el mensaje manualmente. Hace falta integración segura por canal, antispam, IDs externos, revisiones y acuerdos de datos.
+1. **LINKRRSS sí se puede consultar e importar bajo demanda** para negocios ya conectados, con selección humana de mensajes comerciales. **Todavía no hay ingestión push automática** ni webhooks nuevos directos de WhatsApp, Instagram, Gmail o websites hacia LINK Ventas; faltan conexiones seguras por canal, antispam y validaciones.
 2. Analizador **determinista** (regex, coincidencia de nombres de catálogo, citas resaltadas); no modelo IA general. No inventa campos ni atribuye confianzas estadísticas. Requiere revisión humana.
 3. No hay cotizador fiscal, IVA automático, inventario, reservas ni ejecución operacional.
 4. Los productos del catálogo original conservan su identidad y origen, pero su **edición y lectura extendida** no están integradas en este frontend; requiere autorización y adaptador.
 5. Seguridad, flujos de permisos externos, control de concurrencia y pagos deben pasar un test de aceptación con usuarios de distintos negocios antes de invitar público abierto.
-6. Visión de datos limitada por pagina (`250` leads, `150` solicitudes, `500` cobros), aún sin paginación avanzada.
+6. La importación social solo reconoce identidades por contacto validado; candidatos únicamente sociales sin correo o teléfono siguen sujetos a resolución humana en LINK ID antes de una fusión segura.
+7. Visión de datos limitada por página (`250` leads, `150` solicitudes, `500` cobros), aún sin paginación avanzada.
 
 **Ley del No Fake:** los datos reales solo se guardan en Supabase tras autenticación y acción humana. El modo DEMO es simulado y no guarda información en producción.
