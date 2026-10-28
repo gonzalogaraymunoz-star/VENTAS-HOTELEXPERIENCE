@@ -59,8 +59,22 @@ Los 74 registros de `product_catalog` del proyecto original **ya tienen** identi
 - Prueba SQL integral de **negocio → 2 productos → inbox idempotente → lead con persona LINK ID → cotización multi-producto → venta aceptada → listo para operar → lectura aislada de otro negocio**, satisfecha. Se realizó dentro de una transacción con ROLLBACK.
 - Verificada existencia de tablas y RPC de pagos y solicitudes de acceso. Aún no se ha completado test E2E autenticado desde navegador ni reconciliación bancaria.
 
+
+## Integración de fuentes v5 · alimentación continua
+**LINKRRSS → Aduana LINK ID: ACTIVO.** El job `cron.job` denominado `link-ventas-rrss-intake-5m` revisa cada 5 minutos los mensajes entrantes que expresan intención comercial y cuya fecha sea posterior a la activación por negocio. Límite: 50 candidatos por ejecución; una solicitud pendiente por conversación. Identificación por mensaje original con `source_message_id` + `source_conversation_id`; `raw_message=NULL` para LINKRRSS y lectura directamente desde el origen al revisar. **No duplica textos en bandeja** ni retroimporta el historial. La conversión del lead exige confirmación humana y usa el mensaje solo como evidencia comercial histórica.
+
+**Fuente habilitada prospectivamente** para los tres negocios que ya tenían cuentas LINKRRSS conectadas: CARACOL, LAMA Travelers y Raíces Atacama. No se conectaron nuevos perfiles de Instagram ni WhatsApp. Si dejan de llegar mensajes a LINKRRSS, este feed no puede recibirlos. El administrador puede vincular sus negocios existentes por LINK ID desde la sección **Accesos**, sin recrear fichas; cada propietario puede activar/detener el feed desde **Fuentes**.
+
+**Websites → Aduana LINK ID: receptor seguro disponible, integración individual pendiente.** Endpoint para servidores `POST /api/intake`. Un propietario crea un origen desde la interfaz, recibe un `source_id` y una clave privada que **solo se muestra una vez**. Debe instalar su credencial en el backend de su website, jamás en HTML/Javascript público. La ruta del Worker rechaza solicitudes de navegador con encabezado `Origin`; Supabase valida hash SHA-256, estado activo, idempotencia `event_id` y límite 60 envíos por fuente/hora. Cada envío se registra como solicitud pendiente, no lead. Es necesaria la integración de cada website real; no se han cambiado websites de clientes.
+
+**Seguridad y privacidad:** las API de ventas están limitadas por `auth.uid()` y `business_id` y la API pública de website solo admite credencial de alta entropía. El linter de Supabase advierte sobre funciones `SECURITY DEFINER` ejecutables por `authenticated` y una por `anon`; la exposición es deliberada para estos cinco módulos y necesita revisión continua. La validación con ROLLBACK cubrió web credential → inbox → revisión humana → LINK ID; y referencias RRSS sin duplicación de textos. Falta E2E HTTP real de workers.dev/website y prueba con múltiples usuarios finales antes de ofrecer servicio público.
+
+**Archivo del upgrade:** `cloudflare/link-ventas-2-upgrade-v5.sql`.
+**Guía de conexión:** `cloudflare/INTEGRACION-FUENTES.md`.
+
+
 ## Limitaciones explícitas
-1. **LINKRRSS sí se puede consultar e importar bajo demanda** para negocios ya conectados, con selección humana de mensajes comerciales. **Todavía no hay ingestión push automática** ni webhooks nuevos directos de WhatsApp, Instagram, Gmail o websites hacia LINK Ventas; faltan conexiones seguras por canal, antispam y validaciones.
+1. **LINKRRSS** usa ahora un cron activo cada 5 minutos para mensajes comerciales nuevos de negocios con feed activado. También conserva importación manual histórica. **No** hay webhooks propios directos desde Meta/WhatsApp: si el conector LINKRRSS no recibe mensajes, el cron no puede suplirlo. Las websites requieren instalar la credencial en sus servidores (aún no integradas individualmente).
 2. Analizador **determinista** (regex, coincidencia de nombres de catálogo, citas resaltadas); no modelo IA general. No inventa campos ni atribuye confianzas estadísticas. Requiere revisión humana.
 3. No hay cotizador fiscal, IVA automático, inventario, reservas ni ejecución operacional.
 4. Los productos del catálogo original conservan su identidad y origen, pero su **edición y lectura extendida** no están integradas en este frontend; requiere autorización y adaptador.
