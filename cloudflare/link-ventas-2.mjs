@@ -25,9 +25,119 @@ async function receiveWebsite(request){
   return Response.json({ok:true,status:data.status,request_id:data.request_id},{status:data.status==="received"?202:200,headers:WEB_HEADERS});
  }catch(e){return Response.json({error:"Could not process request"},{status:400,headers:WEB_HEADERS})}
 }
+
+// LINK Ventas + LINK ID — Individual AI/LLM API v2. Authenticated exclusively by personal secret in Bearer header.
+const JSON_HEADERS={"Content-Type":"application/json;charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Access-Control-Allow-Origin":"null"};
+function apiJson(value,status=200){return new Response(JSON.stringify(value),{status,headers:JSON_HEADERS})}
+function apiKeyOf(request){const h=request.headers.get("Authorization")||"";const m=/^Bearer (lvs_[a-f0-9]{64})$/i.exec(h);return m?m[1]:null}
+function apiRequestIsSafe(request){return request.method==="POST" && !(request.headers.get("Origin")) && String(request.headers.get("Content-Type")||"").toLowerCase().startsWith("application/json")}
+async function executePersonalApi(request,action,input){
+ const token=apiKeyOf(request);
+ if(!token)return {error:"Se requiere una clave API personal válida",status:401};
+ if(!/^[a-z0-9_:]{3,36}$/.test(String(action||"")))return {error:"Acción inválida",status:400};
+ if(input===null||typeof input!=="object"||Array.isArray(input))return {error:"Se requiere un objeto JSON de datos",status:400};
+ const url="https://zgbnjlrxzvzpigmwidsp.supabase.co/rest/v1/rpc/link_sales_api_execute";
+ try{
+  const upstream=await fetch(url,{
+   method:"POST",
+   headers:{"Content-Type":"application/json","apikey":PUBLIC_SUPABASE_KEY},
+   body:JSON.stringify({p_token:token,p_action:action,p_data:input}),
+   redirect:"error",signal:AbortSignal.timeout(12000)
+  });
+  const res=await upstream.json().catch(()=>({}));
+  if(!upstream.ok){
+   const msg=String(res.message||"");
+   // Relay only explicit business/API validation errors, never raw internals, SQL or JWT stack traces.
+   const notAuthorized=/clave|revocada|expirada|incorrecta|no válida|acceso al negocio/i.test(msg);
+   const forbidden=/permiso|solo lectura|confirmación humana|revisión humana|solo el propietario|otro negocio/i.test(msg);
+   const throttled=/Límite de 90 llamadas/.test(msg);
+   const safe=/^(Clave|El propietario|Permiso|Rol|Confirmación|Revisión|Introduce|Se requiere|Monto|Nombre|Negocio|La credencial|Acción|Debes|Formato|Una cotización|Producto|Los cobros|No es|La solicitud|Solicitud|Solo|Estado|Límite)/i.test(msg)&&msg.length<260&&!/[;{}\n]/.test(msg);
+   return {error:safe?msg:(upstream.status>=500?"Error de servicio":"Solicitud rechazada"),
+    status:throttled?429:notAuthorized?401:forbidden?403:upstream.status>=500?502:400};
+  }
+  return {data:res,status:200};
+ }catch(e){return {error:"No fue posible contactar con LINK CONTROL CENTRAL",status:503}}
+}
+async function personalApiFetch(request){
+ if(!apiRequestIsSafe(request))return apiJson({error:"Solo POST JSON entre servidores, con Authorization Bearer" },request.method!=="POST"?405:403);
+ const bodyText=await request.text();
+ if(bodyText.length>19000)return apiJson({error:"Carga demasiado grande"},413);
+ let body;try{body=JSON.parse(bodyText)}catch(e){return apiJson({error:"JSON inválido"},400)}
+ if(!body||typeof body!=="object"||Array.isArray(body))return apiJson({error:"Se requiere un objeto JSON"},400);
+ const outcome=await executePersonalApi(request,body.action,body.data||{});
+ return apiJson(outcome.error?{ok:false,error:outcome.error}:outcome.data,outcome.status);
+}
+const MCP_TOOLS=[
+ ["linkventas_panel","dashboard","Consultar el tablero comercial real del negocio autorizado.",{}],
+ ["linkventas_solicitudes","requests","Consultar mensajes pendientes en la aduana LINK ID y su evidencia.",{}],
+ ["linkventas_productos","products","Listar catálogo del negocio autorizado y sus LINK ID.",{}],
+ ["linkventas_oportunidades","leads","Listar oportunidades con sus etapas comerciales.",{}],
+ ["linkid_negocio","linkid_overview","Ver el LINK ID del negocio, total de personas vinculadas y productos con código global.",{}],
+ ["linkid_buscar_personas","linkid_search_people","Buscar personas ya relacionadas con este negocio mediante nombre o código LINK ID.",{query:{type:"string",description:"Nombre o LINK ID; mínimo 3 caracteres"}}],
+ ["linkid_obtener_persona","linkid_get_person","Leer la identidad y relaciones comerciales de una persona autorizada.",{link_id:{type:"string",description:"Código LINK ID de la persona"},person_id:{type:"string",description:"UUID alternativo de la persona"}}],
+ ["linkid_resolver_contacto","linkid_resolve_contact","Buscar coincidencias de identidad, exclusivamente dentro del negocio autorizado.",{email:{type:"string"},phone:{type:"string"}}],
+ ["linkventas_previsualizar_identidad","identity_preview","Comprobar si una solicitud coincide con un contacto ya existente sin crear una nueva identidad.",{email:{type:"string"},phone:{type:"string"}}],
+ ["linkventas_recibir_solicitud","receive_request","Ingresar el mensaje original en la bandeja de Adquisición. No crea lead sin revisión.",{raw_message:{type:"string",description:"Solicitud original del cliente"},channel:{type:"string",enum:["manual","whatsapp","instagram","website","email","facebook","other"]},external_ref:{type:"string"}}],
+ ["linkventas_convertir_solicitud","convert_request","Convertir una solicitud tras revisión HUMANA explícita. Nunca aprobar sin autorización del usuario.",{inbox_id:{type:"string"},review_confirmed:{type:"boolean"},full_name:{type:"string"},email:{type:"string"},phone:{type:"string"},product_ids:{type:"array",items:{type:"string"}},existing_lead_id:{type:"string"},review:{type:"object"}}],
+ ["linkventas_crear_producto","create_product","Crear un producto con LINK ID para el negocio autorizado.",{name:{type:"string"},description:{type:"string"},price:{type:"number"},currency:{type:"string"},cost:{type:"number"}}],
+ ["linkventas_actualizar_etapa","set_stage","Actualizar etapa de una oportunidad existente; requiere permiso comercial.",{lead_id:{type:"string"},stage:{type:"string",enum:["new","qualified","contacted","proposal","lost"]}}],
+ ["linkventas_cotizar","quote","Cotizar uno o varios productos actuales; valores sujetos a validación humana.",{lead_id:{type:"string"},items:{type:"array",items:{type:"object",properties:{product_id:{type:"string"},quantity:{type:"integer"}},required:["product_id","quantity"]}}}],
+ ["linkventas_aceptar_venta","accept_sale","Registrar aceptación comercial SOLO después de confirmación explícita del usuario. No registra pago.",{lead_id:{type:"string"},human_confirmed:{type:"boolean"}}],
+ ["linkventas_listo_operar","mark_ready","Marcar lista para operación una venta cerrada SOLO con aprobación humana.",{lead_id:{type:"string"},human_confirmed:{type:"boolean"}}]
+];
+const MCP_REQUIRED={
+ linkventas_recibir_solicitud:["raw_message","channel"],
+ linkventas_convertir_solicitud:["inbox_id","review_confirmed"],
+ linkventas_crear_producto:["name","price","currency"],
+ linkventas_actualizar_etapa:["lead_id","stage"],
+ linkventas_cotizar:["lead_id","items"],
+ linkventas_aceptar_venta:["lead_id","human_confirmed"],
+ linkventas_listo_operar:["lead_id","human_confirmed"],
+ linkid_buscar_personas:["query"]
+};
+function mcpToolsList(){return MCP_TOOLS.map(t=>({name:t[0],description:t[2],inputSchema:{type:"object",properties:t[3],required:MCP_REQUIRED[t[0]]||[],additionalProperties:false}}))}
+function rpcReply(id,result){return {jsonrpc:"2.0",id,result}}
+function rpcError(id,code,message){return {jsonrpc:"2.0",id,error:{code,message}}}
+async function personalMcpFetch(request){
+ if(!apiRequestIsSafe(request))return apiJson(rpcError(null,-32600,"Solo POST JSON entre servidores"),request.method!=="POST"?405:403);
+ if(!apiKeyOf(request))return apiJson(rpcError(null,-32001,"Falta Authorization: Bearer <clave personal>"),401);
+ const bodyText=await request.text();
+ if(bodyText.length>19000)return apiJson(rpcError(null,-32600,"Payload demasiado grande"),413);
+ let input;try{input=JSON.parse(bodyText)}catch(e){return apiJson(rpcError(null,-32700,"JSON inválido"),400)}
+ if(!input||typeof input!=="object"||Array.isArray(input))return apiJson(rpcError(null,-32600,"Objeto JSON-RPC requerido"),400);
+ if(input.method==="notifications/initialized")return new Response(null,{status:202,headers:{"Cache-Control":"no-store"}});
+ const id=input.id??null;
+ if(input.method==="initialize")return apiJson(rpcReply(id,{
+   protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"LINK Ventas + LINK ID",version:"1.0.0"}
+ }));
+ if(input.method==="ping")return apiJson(rpcReply(id,{}));
+ if(input.method==="tools/list")return apiJson(rpcReply(id,{tools:mcpToolsList()}));
+ if(input.method==="tools/call"){
+  const t=MCP_TOOLS.find(x=>x[0]===input.params?.name);
+  if(!t)return apiJson(rpcError(id,-32602,"Herramienta no registrada"));
+  const args=input.params?.arguments||{};
+  const missing=(MCP_REQUIRED[t[0]]||[]).filter(x=>args[x]===undefined||args[x]===null);
+  if(missing.length)return apiJson(rpcError(id,-32602,"Faltan: "+missing.join(", ")));
+  const result=await executePersonalApi(request,t[1],args);
+  if(result.error)return apiJson(rpcReply(id,{content:[{type:"text",text:result.error}],isError:true}));
+  return apiJson(rpcReply(id,{content:[{type:"text",text:JSON.stringify(result.data)}],structuredContent:result.data,isError:false}));
+ }
+ return apiJson(rpcError(id,-32601,"Método MCP no reconocido"));
+}
+const API_OPENAPI={
+ openapi:"3.1.0",info:{title:"LINK Ventas + LINK ID — API",version:"1.0.0",description:"API comercial multiusuario. Cada token pertenece a un usuario y negocio, con permisos read, intake, sales y linkid:read."},
+ servers:[{url:"https://link-ventas-2.gonzalogaraymunoz.workers.dev"}],
+ components:{securitySchemes:{personalToken:{type:"http",scheme:"bearer",description:"Clave generada personalmente en LINK Ventas → API y LLM"}}},
+ paths:{"/api/v1":{post:{summary:"Ejecutar una acción autorizada por usuario y negocio",security:[{personalToken:[]}],requestBody:{required:true,content:{"application/json":{schema:{type:"object",required:["action"],properties:{action:{type:"string",enum:["dashboard","requests","products","leads","linkid_overview","linkid_search_people","linkid_get_person","linkid_resolve_contact","identity_preview","receive_request","convert_request","create_product","update_product","set_stage","quote","accept_sale","mark_ready","feed_status"]},data:{type:"object"}}}}}},responses:{"200":{description:"Respuesta operativa"},"401":{description:"Clave inválida"},"403":{description:"Permiso no autorizado"},"429":{description:"Límite por minuto excedido"}}}}},
+ "/mcp":{post:{summary:"Servidor MCP remoto con las herramientas de LINK Ventas y LINK ID",security:[{personalToken:[]}],responses:{"200":{description:"Respuesta MCP JSON-RPC"}}}}
+ };
+
 export default {
  async fetch(request){
   const path=new URL(request.url).pathname;
+  if(path==="/api/v1")return personalApiFetch(request);
+  if(path==="/mcp")return personalMcpFetch(request);
+  if(path==="/openapi.json"&&request.method==="GET")return apiJson(API_OPENAPI);
   if(path==="/api/intake")return receiveWebsite(request);
   if(path==="/health")return Response.json({app:"LINK Ventas",release:"2.0-feeds-v5",status:"ok",source:"Cloudflare Workers",data:"Supabase LINK CONTROL CENTRAL",ingest:"server-to-server",automation:"pg_cron 5m"});
   if(path!=="/"&&path!=="/index.html")return new Response("No encontrado",{status:404});
