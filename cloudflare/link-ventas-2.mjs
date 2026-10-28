@@ -72,7 +72,6 @@ const MCP_TOOLS=[
  ["linkventas_solicitudes","requests","Consultar mensajes pendientes en la aduana LINK ID y su evidencia.",{}],
  ["linkventas_productos","products","Listar catálogo del negocio autorizado y sus LINK ID.",{}],
  ["linkventas_oportunidades","leads","Listar oportunidades con sus etapas comerciales.",{}],
- ["linkventas_estado_fuentes","feed_status","Consultar canales LINKRRSS conectados y estado del alimentador de solicitudes automáticas del negocio.",{}],
  ["linkid_negocio","linkid_overview","Ver el LINK ID del negocio, total de personas vinculadas y productos con código global.",{}],
  ["linkid_buscar_personas","linkid_search_people","Buscar personas ya relacionadas con este negocio mediante nombre o código LINK ID.",{query:{type:"string",description:"Nombre o LINK ID; mínimo 3 caracteres"}}],
  ["linkid_obtener_persona","linkid_get_person","Leer la identidad y relaciones comerciales de una persona autorizada.",{link_id:{type:"string",description:"Código LINK ID de la persona"},person_id:{type:"string",description:"UUID alternativo de la persona"}}],
@@ -81,7 +80,6 @@ const MCP_TOOLS=[
  ["linkventas_recibir_solicitud","receive_request","Ingresar el mensaje original en la bandeja de Adquisición. No crea lead sin revisión.",{raw_message:{type:"string",description:"Solicitud original del cliente"},channel:{type:"string",enum:["manual","whatsapp","instagram","website","email","facebook","other"]},external_ref:{type:"string"}}],
  ["linkventas_convertir_solicitud","convert_request","Convertir una solicitud tras revisión HUMANA explícita. Nunca aprobar sin autorización del usuario.",{inbox_id:{type:"string"},review_confirmed:{type:"boolean"},full_name:{type:"string"},email:{type:"string"},phone:{type:"string"},product_ids:{type:"array",items:{type:"string"}},existing_lead_id:{type:"string"},review:{type:"object"}}],
  ["linkventas_crear_producto","create_product","Crear un producto con LINK ID para el negocio autorizado.",{name:{type:"string"},description:{type:"string"},price:{type:"number"},currency:{type:"string"},cost:{type:"number"}}],
- ["linkventas_actualizar_producto","update_product","Actualizar nombre, descripción, precio, costo y estado activo/pausado de un producto propio del negocio; nunca altera su LINK ID.",{product_id:{type:"string"},name:{type:"string"},description:{type:"string"},price:{type:"number"},currency:{type:"string"},cost:{type:"number"},status:{type:"string",enum:["active","paused"]}}],
  ["linkventas_actualizar_etapa","set_stage","Actualizar etapa de una oportunidad existente; requiere permiso comercial.",{lead_id:{type:"string"},stage:{type:"string",enum:["new","qualified","contacted","proposal","lost"]}}],
  ["linkventas_cotizar","quote","Cotizar uno o varios productos actuales; valores sujetos a validación humana.",{lead_id:{type:"string"},items:{type:"array",items:{type:"object",properties:{product_id:{type:"string"},quantity:{type:"integer"}},required:["product_id","quantity"]}}}],
  ["linkventas_aceptar_venta","accept_sale","Registrar aceptación comercial SOLO después de confirmación explícita del usuario. No registra pago.",{lead_id:{type:"string"},human_confirmed:{type:"boolean"}}],
@@ -91,7 +89,6 @@ const MCP_REQUIRED={
  linkventas_recibir_solicitud:["raw_message","channel"],
  linkventas_convertir_solicitud:["inbox_id","review_confirmed"],
  linkventas_crear_producto:["name","price","currency"],
- linkventas_actualizar_producto:["product_id","name","price","currency"],
  linkventas_actualizar_etapa:["lead_id","stage"],
  linkventas_cotizar:["lead_id","items"],
  linkventas_aceptar_venta:["lead_id","human_confirmed"],
@@ -173,7 +170,7 @@ async function callNativeOAuth(jwt,action,args){
 }
 function oauthToolList(){
  const tools=[{name:"linkventas_mi_conexion",description:"Consultar el negocio y permisos autorizados para esta conexión ChatGPT.",inputSchema:{type:"object",properties:{},required:[],additionalProperties:false},annotations:{readOnlyHint:true},securitySchemes:[{type:"oauth2",scopes:["openid","email"]}]}];
- return tools.concat(mcpToolsList().map(t=>({...t,annotations:{readOnlyHint:!["linkventas_recibir_solicitud","linkventas_convertir_solicitud","linkventas_crear_producto","linkventas_actualizar_producto","linkventas_actualizar_etapa","linkventas_cotizar","linkventas_aceptar_venta","linkventas_listo_operar"].includes(t.name)},securitySchemes:[{type:"oauth2",scopes:["openid","email"]}]})));
+ return tools.concat(mcpToolsList().map(t=>({...t,annotations:{readOnlyHint:!["linkventas_recibir_solicitud","linkventas_convertir_solicitud","linkventas_crear_producto","linkventas_actualizar_etapa","linkventas_cotizar","linkventas_aceptar_venta","linkventas_listo_operar"].includes(t.name)},securitySchemes:[{type:"oauth2",scopes:["openid","email"]}]})));
 }
 async function nativeMcpFetch(request){
  if(request.method==="GET")return new Response(null,{status:405,headers:{"Allow":"POST","Cache-Control":"no-store"}});
