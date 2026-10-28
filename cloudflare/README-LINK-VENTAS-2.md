@@ -112,3 +112,12 @@ Se agregó una **API unificada** de LINK Ventas y LINK ID. Cada usuario con memb
 Las claves se muestran una vez, no se guardan en texto plano y nunca deben incluirse en el prompt de un LLM o en `mcp.json`. No se han generado credenciales de usuario reales automáticamente.
 
 **Estado de integración nativa en ChatGPT:** pendiente OAuth 2.1 + conexión de plugin, dado que la invocación `@LINK Ventas` no puede utilizar directamente una clave API personalizada. Los clientes LLM que admitan autenticación HTTP Bearer pueden integrar estas rutas. La versión se ha desplegado y se ha probado la lógica de permisos en SQL (pruebas revertidas), pero no se ha completado una prueba externa E2E con una clave real.
+
+
+## ChatGPT OAuth nativo · v2.3 (preparado, requiere activación)
+- **Complemento privado**: [LINK Ventas](https://chatgpt.com/plugins/plugins_6ae17d235fd88191a583101bee1e5c7a).
+- **Endpoint MCP autenticado**: `/mcp/oauth`. Documento OAuth Protected Resource Metadata en `/.well-known/oauth-protected-resource/mcp/oauth`, con issuer Supabase Auth.
+- **Pantalla de autorización**: `/oauth/consent`, con inicio de sesión Supabase, selección de negocio y permisos explícitos.
+- **SQL**: `cloudflare/link-ventas-2-upgrade-v7-native-oauth.sql`. Concesiones por usuario + cliente OAuth + negocio, revocación, límites y comprobación del recurso en el JWT.
+- **Guía**: `cloudflare/LINK-VENTAS-MCP-OAUTH.md`.
+- **Última verificación**: Supabase no anunciaba `registration_endpoint`; se requiere habilitar DCR y la configuración de consentimiento/Auth Hook en el panel. No se modificaron los ajustes de Auth Site URL ni Hooks para evitar afectar otras aplicaciones. No hay sesión OAuth real probada todavía; no afirmar que @LINK Ventas ya funciona.
