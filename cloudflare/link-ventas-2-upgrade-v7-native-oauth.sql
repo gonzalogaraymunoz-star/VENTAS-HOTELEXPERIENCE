@@ -156,3 +156,97 @@ GRANT EXECUTE ON FUNCTION public.link_sales_mcp_execute(text,jsonb) TO authentic
 -- Cleanup optional recurring cron; create once per deployment.
 SELECT cron.schedule('link-ventas-oauth-rate-prune','15 4 * * *',
  'DELETE FROM public.link_sales_mcp_oauth_rate WHERE window_start < now() - interval ''2 days'';');
+
+-- Token audience binding. Activate this function in Authentication > Hooks only after checking existing hooks.
+CREATE OR REPLACE FUNCTION public.link_sales_mcp_access_token_hook(event jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog', 'public', 'auth'
+AS $function$
+DECLARE claims jsonb:=event->'claims';v_client uuid;
+BEGIN
+ IF jsonb_typeof(claims)<>'object' THEN RETURN event; END IF;
+ BEGIN v_client:=nullif(claims->>'client_id','')::uuid;EXCEPTION WHEN invalid_text_representation THEN v_client:=NULL;END;
+ IF v_client IS NOT NULL AND EXISTS(
+  SELECT 1 FROM auth.oauth_clients oc WHERE oc.id=v_client AND oc.deleted_at IS NULL
+   AND (oc.redirect_uris ILIKE '%https://chatgpt.com/connector/oauth/%'
+    OR oc.redirect_uris ILIKE '%https://chatgpt.com/connector_platform_oauth_redirect%')
+ ) THEN
+    claims:=jsonb_set(claims,'{mcp_resource}',to_jsonb('https://link-ventas-2.gonzalogaraymunoz.workers.dev/mcp/oauth'::text),true);
+ END IF;
+ RETURN jsonb_build_object('claims',claims);
+END
+$function$;
+REVOKE ALL ON FUNCTION public.link_sales_mcp_access_token_hook(jsonb) FROM PUBLIC,anon,authenticated;
+GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
+GRANT EXECUTE ON FUNCTION public.link_sales_mcp_access_token_hook(jsonb) TO supabase_auth_admin;
+
+-- Current gateway requires mcp_resource in verified Supabase OAuth JWT.
+CREATE OR REPLACE FUNCTION public.link_sales_mcp_execute(p_action text, p_data jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'auth', 'private'
+AS $function$
+DECLARE v_user uuid:=auth.uid();v_client uuid;v_grant public.link_sales_mcp_oauth_grants%rowtype;
+ v_role text;v_act text;v_scope text;v_body jsonb;v_result jsonb;v_hit int;
+BEGIN
+ IF v_user IS NULL THEN RAISE EXCEPTION 'Sesión requerida'; END IF;
+ IF jsonb_typeof(coalesce(p_data,'{}'::jsonb))<>'object' OR length(p_data::text)>18000
+  THEN RAISE EXCEPTION 'Entrada inválida'; END IF;
+ v_client:=nullif(auth.jwt()->>'client_id','')::uuid;
+ IF v_client IS NULL THEN RAISE EXCEPTION 'Se requiere un token OAuth de cliente'; END IF;
+ IF (auth.jwt()->>'mcp_resource') IS DISTINCT FROM 'https://link-ventas-2.gonzalogaraymunoz.workers.dev/mcp/oauth' THEN
+  RAISE EXCEPTION 'Token OAuth no emitido para LINK Ventas MCP';
+ END IF;
+ SELECT * INTO v_grant FROM public.link_sales_mcp_oauth_grants g
+ WHERE g.user_id=v_user AND g.client_id=v_client AND g.status='approved';
+ IF NOT FOUND THEN RAISE EXCEPTION 'ChatGPT aún no fue autorizado para esta identidad'; END IF;
+ -- Verify client stays registered as a ChatGPT OAuth application, and business membership remains current.
+ IF NOT EXISTS(SELECT 1 FROM auth.oauth_clients oc WHERE oc.id=v_client AND oc.deleted_at IS NULL
+  AND (oc.redirect_uris ILIKE '%https://chatgpt.com/connector/oauth/%' OR oc.redirect_uris ILIKE '%https://chatgpt.com/connector_platform_oauth_redirect%')) THEN RAISE EXCEPTION 'Cliente OAuth revocado'; END IF;
+ SELECT role INTO v_role FROM public.link_sales_members WHERE business_id=v_grant.business_id AND user_id=v_user;
+ IF v_role IS NULL THEN RAISE EXCEPTION 'Acceso al negocio revocado'; END IF;
+ v_act:=lower(btrim(coalesce(p_action,'')));
+ v_scope:=CASE
+  WHEN v_act IN ('profile','dashboard','requests','products','leads','identity_preview','feed_status') THEN 'read'
+  WHEN v_act IN ('linkid_overview','linkid_search_people','linkid_get_person','linkid_resolve_contact') THEN 'linkid:read'
+  WHEN v_act IN ('receive_request','convert_request') THEN 'intake'
+  WHEN v_act IN ('create_product','update_product','set_stage','quote','accept_sale','mark_ready') THEN 'sales'
+  ELSE NULL END;
+ IF v_scope IS NULL OR NOT (v_scope=ANY(v_grant.scopes)) THEN RAISE EXCEPTION 'Permiso de ChatGPT insuficiente'; END IF;
+ IF v_scope IN ('sales','intake') AND v_role='viewer' THEN RAISE EXCEPTION 'Rol solo lectura'; END IF;
+ IF p_data?'business_id' AND p_data->>'business_id' IS DISTINCT FROM v_grant.business_id::text
+ THEN RAISE EXCEPTION 'La solicitud intenta acceder a otro negocio'; END IF;
+ INSERT INTO public.link_sales_mcp_oauth_rate(user_id,client_id,window_start,calls)
+ VALUES(v_user,v_client,date_trunc('minute',now()),1)
+ ON CONFLICT(user_id,client_id,window_start) DO UPDATE SET calls=public.link_sales_mcp_oauth_rate.calls+1
+ RETURNING calls INTO v_hit;
+ IF v_hit>60 THEN RAISE EXCEPTION 'Demasiadas solicitudes OAuth por minuto'; END IF;
+ v_body:=p_data||jsonb_build_object('business_id',v_grant.business_id);
+ IF v_act='profile' THEN
+  v_result:=jsonb_build_object('id',encode(extensions.digest(v_user::text||'|'||v_grant.business_id::text,'sha256'),'hex'),
+   'business_id',v_grant.business_id,'business_name',(SELECT name FROM public.link_world_businesses WHERE id=v_grant.business_id),
+   'scopes',v_grant.scopes);
+ ELSIF v_act IN ('dashboard','products','leads') THEN
+  v_result:=public.link_sales_portal('home',v_body);
+  IF v_act='products' THEN v_result:=jsonb_build_object('ok',true,'items',coalesce(v_result->'items','[]'::jsonb)); END IF;
+  IF v_act='leads' THEN v_result:=jsonb_build_object('ok',true,'leads',coalesce(v_result->'leads','[]'::jsonb)); END IF;
+ ELSIF v_act='requests' THEN v_result:=public.link_sales_acquisition('list',v_body);
+ ELSIF v_act='identity_preview' THEN v_result:=public.link_sales_acquisition('identity_preview',v_body);
+ ELSIF v_act='feed_status' THEN v_result:=public.link_sales_feed_control('status',v_body);
+ ELSIF v_scope='linkid:read' THEN v_result:=public.link_sales_linkid(substring(v_act from 8),v_body);
+ ELSIF v_act='receive_request' THEN v_result:=public.link_sales_acquisition('receive',v_body);
+ ELSIF v_act='convert_request' THEN
+  IF p_data->>'review_confirmed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Revisión humana requerida'; END IF;
+  v_result:=public.link_sales_acquisition('convert',v_body);
+ ELSIF v_act='quote' THEN v_result:=public.link_sales_quote_multi(v_body);
+ ELSIF v_act IN ('create_product','update_product','set_stage','accept_sale','mark_ready') THEN
+  IF v_act IN ('accept_sale','mark_ready') AND p_data->>'human_confirmed' IS DISTINCT FROM 'true'
+  THEN RAISE EXCEPTION 'Confirmación humana requerida'; END IF;
+  v_result:=public.link_sales_portal(CASE WHEN v_act='accept_sale' THEN 'accept_quote' ELSE v_act END,v_body);
+ END IF;
+ RETURN jsonb_build_object('ok',true,'action',v_act,'business_id',v_grant.business_id,'data',v_result);
+END $function$;
+REVOKE ALL ON FUNCTION public.link_sales_mcp_execute(text,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.link_sales_mcp_execute(text,jsonb) TO authenticated;
