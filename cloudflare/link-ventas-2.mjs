@@ -293,7 +293,8 @@ $("deny").onclick=async()=>{
  if(result.data?.redirect_url)location.assign(result.data.redirect_url);
  else status(result.error?.message||"Solicitud rechazada");
 };
-if(!authId||!/^[0-9a-f-]{20,80}$/i.test(authId)){status("Solicitud OAuth inválida: falta authorization_id.");}
+if(!authId){status("Solicitud OAuth inválida: falta authorization_id.");}
+else if(!/^[A-Za-z0-9_-]{8,512}$/.test(authId)){status("Solicitud OAuth inválida: authorization_id mal formado.");}
 else{await loginFromExistingSession();try{await loadConsent()}catch(e){status(e.message)}}
 </script></body></html>`;
 function oauthConsentPage(){
