@@ -3,3 +3,6 @@
 .ficha360 .page-heading>.button{align-self:flex-start;height:auto;min-height:40px;flex-shrink:0}
 
 .ficha360-actions{position:static;bottom:auto}
+
+
+.ficha360 .page-heading h1{overflow-wrap:anywhere}.ficha360-ref{font-family:ui-monospace,monospace;font-size:12px;overflow-wrap:anywhere;word-break:break-word;margin:6px 0 0;color:#625c53}
