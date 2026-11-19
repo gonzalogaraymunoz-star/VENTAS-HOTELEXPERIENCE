@@ -42,6 +42,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
   function openFicha(leadId = 'new') { window.location.hash = `ficha360/${encodeURIComponent(leadId)}`; setFichaLeadId(leadId); setScreen('ficha360'); }
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editLeadId, setEditLeadId] = useState('');
@@ -64,7 +65,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
       setData({ ...reference, leads: activeLeads, services: activeServices, payments: activePayments });
     } catch (e: any) {
       setError(e?.message || 'No fue posible cargar los datos.');
-    } finally { setLoading(false); }
+    } finally { setLoading(false); setInitialized(true); }
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -131,7 +132,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 
       <section className="content-area">
         {error && <div className="error-box page-error">{error}</div>}
-        {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
+        {loading && !initialized ? <div className="loading-panel">Cargando información comercial…</div> : <>
           {screen === 'ficha360' && <ClientFicha360 key={fichaLeadId} leadId={fichaLeadId === 'new' ? undefined : fichaLeadId} hotels={data.hotels} sellers={profile.role === 'agent' ? data.sellers.filter(seller => seller.id === profile.id) : data.sellers} canEdit={profile.is_active && ['admin','manager','agent'].includes(profile.role)} onClose={() => { window.history.replaceState(null, '', window.location.pathname + window.location.search); go('leads'); }} onSaved={refresh}/>}
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
           {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} pendingContext={pendingResolution||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setPendingResolution(null);setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
