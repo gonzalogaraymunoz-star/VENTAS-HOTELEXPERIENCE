@@ -9,8 +9,9 @@ import { ProductWorkspace } from './SalesWorkspaces';
 import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
 import TourSalesBoard from './TourSalesBoard';
+import ClientFicha360 from './ClientFicha360';
 
-type Screen = 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
+type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
 
 type PendingResolution={taskKey:string;title:string;detail:string;step:number;destination:string};
 
@@ -27,7 +28,18 @@ type AppData = {
 const emptyData: AppData = { hotels: [], products: [], suppliers: [], sellers: [], leads: [], services: [], payments: [] };
 
 export default function SalesAppV2({ profile }: { profile: Profile }) {
-  const [screen, setScreen] = useState<Screen>('dashboard');
+  const [screen, setScreen] = useState<Screen>(window.location.hash.startsWith('#ficha360/') ? 'ficha360' : 'dashboard');
+  const [fichaLeadId, setFichaLeadId] = useState(() => decodeURIComponent(window.location.hash.slice('#ficha360/'.length)));
+  useEffect(() => {
+    function routeFicha() {
+      if (!window.location.hash.startsWith('#ficha360/')) return;
+      setFichaLeadId(decodeURIComponent(window.location.hash.slice('#ficha360/'.length)));
+      setScreen('ficha360');
+    }
+    window.addEventListener('hashchange', routeFicha);
+    return () => window.removeEventListener('hashchange', routeFicha);
+  }, []);
+  function openFicha(leadId = 'new') { window.location.hash = `ficha360/${encodeURIComponent(leadId)}`; setFichaLeadId(leadId); setScreen('ficha360'); }
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -120,11 +132,12 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
       <section className="content-area">
         {error && <div className="error-box page-error">{error}</div>}
         {loading && data.leads.length === 0 ? <div className="loading-panel">Cargando información comercial…</div> : <>
+          {screen === 'ficha360' && <ClientFicha360 key={fichaLeadId} leadId={fichaLeadId === 'new' ? undefined : fichaLeadId} hotels={data.hotels} sellers={profile.role === 'agent' ? data.sellers.filter(seller => seller.id === profile.id) : data.sellers} canEdit={profile.is_active && ['admin','manager','agent'].includes(profile.role)} onClose={() => { window.history.replaceState(null, '', window.location.pathname + window.location.search); go('leads'); }} onSaved={refresh}/>}
           {screen === 'dashboard' && <ReservationDashboard leads={data.leads} services={data.services} payments={data.payments} onNew={() => newIntake()} onEdit={editIntake} onClients={() => go('leads')} onPayments={() => openPayments()} onPipeline={() => go('pipeline')}/>} 
           {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} pendingContext={pendingResolution||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setPendingResolution(null);setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
           {screen === 'tours'&&<TourSalesBoard onAddReservation={departure=>newIntake(departure.product_catalog_id||'',departure)}/>} 
           {screen === 'catalog' && <EmbeddedCatalog/>} 
-          {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onUpdated={refresh}/>} 
+          {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
@@ -136,6 +149,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
 
 function titleFor(screen: Screen) {
   return ({
+    'ficha360': 'Ficha 360 privada',
     dashboard: 'Centro de trabajo',
     'new-sale': 'Cotización e ingreso',
     tours:'Tours asignados · Operaciones',
