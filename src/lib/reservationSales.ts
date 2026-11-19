@@ -4,6 +4,7 @@ import { stayLength } from './sales';
 import type { PassengerDraft, ServiceDraft } from '../types';
 
 export type ReservationDraftInput = {
+  expectedUpdatedAt?: string;
   hotelPartnerId: string;
   channel: string;
   priority: string;
@@ -90,6 +91,7 @@ function buildPayload(input: ReservationDraftInput) {
   });
 
   return {
+    expected_updated_at: input.expectedUpdatedAt || null,
     hotel_partner_id: input.hotelPartnerId,
     channel: input.channel || 'Venta directa',
     priority: input.priority === 'Sin fecha' ? 'Media' : input.priority || 'Media',
