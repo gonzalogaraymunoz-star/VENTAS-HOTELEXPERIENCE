@@ -42,7 +42,7 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       setLinkedServices((serviceResult.data || []) as LeadService[]);
       const row = leadResult.data as IntakeLead;
       setLead(row); setContact(row.contacto || ''); setHotelId(row.hotel_partner_id || ''); setSellerId(row.assigned_to || '');
-      setRequest({ ...emptyRequest(), ...row.intake_request });
+      setRequest({ ...emptyRequest(), ...Object.fromEntries(Object.entries(row.intake_request ?? {}).map(([key, value]) => [key, value ?? (key === 'pax' || key === 'agreedPrice' ? null : '')])) });
       setPeople((passengerResult.data || []).map(row => ({ ...emptyIntakePassenger(), ...Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value ?? ''])) })) as IntakePassenger[]);
       setLoaded(true);
     }).catch((problem: unknown) => { if (active) setError(problem instanceof Error ? problem.message : 'No se pudo leer la ficha. Comprueba tu acceso.'); }).finally(() => { if (active) setLoading(false); });
@@ -98,3 +98,4 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
     </>}
   </div>;
 }
+
