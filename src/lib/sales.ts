@@ -94,7 +94,7 @@ export async function loadLeads(limit = 250) {
 export async function loadLeadPassengers(leadId: string) {
   const { data, error } = await supabase
     .from('passengers')
-    .select('id,lead_id,passenger_code,full_name,email,phone,nationality,document_type,document_number,birth_date,dietary_restrictions,is_primary')
+    .select('id,lead_id,passenger_code,full_name,email,phone,nationality,document_type,document_number,birth_date,dietary_restrictions,medical_notes,disability_type,updated_at,is_primary')
     .eq('lead_id', leadId)
     .order('passenger_code', { ascending: true });
   if (error) throw error;
