@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { emptyRequest, intakeMissing, intakePayload, type IntakeRequest, type IntakePassenger } from '../lib/clientIntake360';
 import {
   ArrowRight, Boxes, Building2, Check, CheckCircle2, Copy, Download, FileText, Mail,
   Plus, Send, Users, X,
@@ -144,6 +146,9 @@ export default function SalesFlowForm({
   onCompleted: () => Promise<void>;
 }) {
   const existingLead = useMemo(() => leads.find(lead => lead.id === initialLeadId) || null, [leads, initialLeadId]);
+  const intakeRequest = (existingLead as (Lead & { intake_request?: Partial<IntakeRequest> }) | null)?.intake_request;
+  const isIntake = Boolean(intakeRequest);
+  const request = { ...emptyRequest(), ...intakeRequest };
   const availableSellers = useMemo(
     () => profile.role === 'agent' ? sellers.filter(seller => seller.id === profile.id) : sellers,
     [sellers, profile.id, profile.role],
@@ -152,11 +157,11 @@ export default function SalesFlowForm({
   const [activeStep, setActiveStep] = useState(() => pendingContext ? Math.max(0,Math.min(5,pendingContext.step)) : stageToStep(existingLead?.sales_stage));
   const [leadId, setLeadId] = useState(initialLeadId || '');
   const [leadCode, setLeadCode] = useState(existingLead?.codigo || '');
-  const [reference, setReference] = useState(existingLead?.reservation_reference || '');
-  const [paxCount, setPaxCount] = useState(Math.max(1, Number(existingLead?.numero_pax || 1)));
-  const [hotelId, setHotelId] = useState(existingLead?.hotel_partner_id || hotels[0]?.id || '');
-  const [channel, setChannel] = useState(existingLead?.canal || 'Recepción');
-  const [sellerProfileId, setSellerProfileId] = useState(existingLead?.assigned_to || profile.id);
+  const [reference, setReference] = useState(existingLead?.reservation_reference || (isIntake ? 'Solicitud de tour' : ''));
+  const [paxCount, setPaxCount] = useState(Math.max(1, Number(existingLead?.numero_pax || request.pax || 1)));
+  const [hotelId, setHotelId] = useState(existingLead?.hotel_partner_id || (isIntake ? '' : hotels[0]?.id || ''));
+  const [channel, setChannel] = useState(existingLead?.canal || (isIntake ? '' : 'Recepción'));
+  const [sellerProfileId, setSellerProfileId] = useState(existingLead?.assigned_to || (isIntake ? '' : profile.id));
   const [checkin, setCheckin] = useState(existingLead?.checkin || '');
   const [checkout, setCheckout] = useState(existingLead?.checkout || '');
   const [contact, setContact] = useState(existingLead?.contacto || '');
@@ -169,7 +174,7 @@ export default function SalesFlowForm({
   const [hotelRoom, setHotelRoom] = useState(existingLead?.hotel_room || '');
   const [paymentLink, setPaymentLink] = useState(existingLead?.payment_link || '');
   const [paymentCoordination, setPaymentCoordination] = useState(existingLead?.payment_coordination_status || (existingLead?.payment_link_sent_at ? 'link_sent' : 'pending'));
-  const [passengers, setPassengers] = useState<PassengerDraft[]>(() => Array.from({ length: Math.max(1, Number(existingLead?.numero_pax || 1)) }, (_, index) => blankPassenger(index === 0)));
+  const [passengers, setPassengers] = useState<PassengerDraft[]>(() => Array.from({ length: Math.max(1, Number(existingLead?.numero_pax || request.pax || 1)) }, (_, index) => blankPassenger(!isIntake && index === 0)));
   const [draftServices, setDraftServices] = useState<ServiceDraft[]>(
     initialLeadId ? services.filter(service => service.lead_id === initialLeadId && service.booking_status === 'quoted').map(serviceToDraft) : [],
   );
@@ -210,11 +215,11 @@ export default function SalesFlowForm({
   }, [pendingContext?.taskKey]);
 
   useEffect(() => {
-    if (!hotelId && hotels[0]) setHotelId(hotels[0].id);
+    if (!isIntake && !hotelId && hotels[0]) setHotelId(hotels[0].id);
   }, [hotels, hotelId]);
 
   useEffect(() => {
-    if (!availableSellers.some(seller => seller.id === sellerProfileId) && availableSellers[0]) setSellerProfileId(availableSellers[0].id);
+    if (!isIntake && !availableSellers.some(seller => seller.id === sellerProfileId) && availableSellers[0]) setSellerProfileId(availableSellers[0].id);
   }, [availableSellers, sellerProfileId]);
 
   useEffect(() => {
@@ -224,8 +229,8 @@ export default function SalesFlowForm({
 
   useEffect(() => {
     setPassengers(current => Array.from({ length: paxCount }, (_, index) => ({
-      ...(current[index] || blankPassenger(index === 0)),
-      is_primary: index === 0,
+      ...(current[index] || blankPassenger(!isIntake && index === 0)),
+      is_primary: isIntake ? Boolean(current[index]?.is_primary) : index === 0,
     })));
     setDraftServices(current => current.map(service => {
       const previous = (service.passenger_indexes || []).filter(index => index < paxCount);
@@ -242,16 +247,17 @@ export default function SalesFlowForm({
       if (rows.length) {
         setPaxCount(Math.max(1, rows.length));
         setPassengers(rows.map((row: any, index: number) => {
-          const op = operational.passengers[index];
+          const op = operational.passengers.find(person => person.id === row.id); 
           return {
+            ...row,
             full_name: /^Cliente por completar$|^Acompañante \d+$/i.test(String(row.full_name || '')) ? '' : row.full_name || '',
             first_name: op?.first_name || '', last_name: op?.last_name || '',
             email: row.email || '', phone: row.phone || '',
             nationality: row.nationality || (index === 0 ? existingLead?.nationality || '' : ''),
-            document_type: row.document_type || 'Pasaporte', document_number: row.document_number || '',
+            document_type: row.document_type || (isIntake ? '' : 'Pasaporte'), document_number: row.document_number || '',
             birth_date: row.birth_date || '', dietary_restrictions: row.dietary_restrictions || '',
             gender: op?.gender || '', disability_type: op?.disability_type || '',
-            medical_notes: op?.medical_notes || row.medical_notes || '', is_primary: index === 0,
+            medical_notes: op?.medical_notes || row.medical_notes || '', is_primary: isIntake ? Boolean(row.is_primary) : index === 0,
           };
         }));
       }
@@ -260,6 +266,7 @@ export default function SalesFlowForm({
         return saved?.passenger_indexes?.length ? { ...service, passenger_indexes: saved.passenger_indexes, pax: saved.passenger_indexes.length } : service;
       }));
       setQuote(latest);
+      if (isIntake && !existingLead?.reservation_reference) setReference(rows.map((row: any) => row.full_name).filter(Boolean).join(' · ') || 'Solicitud de tour');
     }).catch((error: any) => setMessage(error?.message || 'No se pudo cargar el ingreso.'));
     return () => { alive = false; };
   }, [initialLeadId]);
@@ -336,7 +343,7 @@ export default function SalesFlowForm({
 
   function draftInput(): ReservationDraftInput {
     return {
-      hotelPartnerId: hotelId, channel, priority, checkin, checkout, contact, nationality, stayDays,
+      expectedUpdatedAt: existingLead?.updated_at || undefined, hotelPartnerId: hotelId, channel, priority, checkin, checkout, contact, nationality, stayDays,
       sellerProfileId, passengers, services: draftServices, notes,
     };
   }
@@ -355,8 +362,23 @@ export default function SalesFlowForm({
     };
   }
 
+  const intakePending = isIntake ? intakeMissing({ hotel_partner_id: hotelId || null, assigned_to: sellerProfileId || null, contacto: contact }, passengers as IntakePassenger[], request as IntakeRequest) : [];
+  const intakeCommercialReady = !isIntake || (intakePending.length === 0 && request.currency === 'CLP');
+
   async function persist(stage = 'data_capture', silent = false) {
     const input = draftInput();
+    if (isIntake && !draftServices.length) {
+      if (passengers.some(person => !(person as IntakePassenger).id || !(person as IntakePassenger).updated_at)) throw new Error('Espera la carga de los pasajeros originales antes de guardar.');
+      const payload = intakePayload(existingLead, passengers as IntakePassenger[], request as IntakeRequest, contact);
+      const { error } = await supabase.rpc('save_link_intake_quote360', { p_payload: { ...payload, hotel_partner_id: hotelId || null, seller_profile_id: sellerProfileId || null, reservation_reference: reference.trim() || null } });
+      if (error) throw error;
+      const refreshed = await loadLeadPassengers(leadId);
+      setPassengers(current => current.map(person => { const row = refreshed.find((item: any) => item.id === (person as IntakePassenger).id); return row ? { ...person, id: row.id, updated_at: row.updated_at } : person; }));
+      await onSaved();
+      if (!silent) setMessage('Propuesta parcial guardada en el mismo expediente. Sin precio inventado, confirmación, mensajes ni Drive.');
+      return leadId;
+    }
+    if (isIntake && !intakeCommercialReady) throw new Error('Completa y valida los datos pendientes de la solicitud antes de guardar productos valorizados. La carta actual sólo admite CLP explícitamente informado.');
     if (!reference.trim()) throw new Error('Agrega un nombre de referencia para la reserva.');
     if (!(paxCount > 0)) throw new Error('El número de pax debe ser mayor que cero.');
     if (!hotelId) throw new Error('Selecciona el hotel / negocio de origen.');
@@ -381,10 +403,15 @@ export default function SalesFlowForm({
     }
     await persistOperationalPassengerData(id, passengers, draftServices);
     await updateSalesFlow(id, { ...metadata(stage), sales_stage: stage });
-    if (operationsUrl) await ensureReservationArchive(operationsUrl, id).catch(error => console.warn('Reserva sin carpeta Drive todavía', error));
+    if (operationsUrl && !isIntake) await ensureReservationArchive(operationsUrl, id).catch(error => console.warn('Reserva sin carpeta Drive todavía', error));
     if (!silent) setMessage(`Ingreso ${leadCode || reference} guardado sin enviar a Operaciones.`);
     await onSaved();
     return id;
+  }
+
+  async function saveInPlace(stage = 'data_capture') {
+    setBusy(true); setMessage('');
+    try { await persist(stage); } catch (error: any) { setMessage(error?.message || 'No se pudo guardar. Recarga antes de repetir.'); } finally { setBusy(false); }
   }
 
   async function saveAndNext() {
@@ -397,6 +424,7 @@ export default function SalesFlowForm({
   async function generateQuote() {
     setBusy(true); setMessage('');
     try {
+      if (!intakeCommercialReady) throw new Error('La propuesta sigue pendiente de datos comerciales y moneda. No se emitirá una cotización con supuestos.');
       const id = await persist('data_capture', true);
       const generated = await createQuoteSnapshot(id);
       setQuote(generated); setActiveStep(2);
@@ -592,10 +620,11 @@ export default function SalesFlowForm({
 
   return <div className="sales-flow">
     <section className="sales-flow-head">
-      <div><p className="eyebrow">FLUJO ÚNICO · LINK VENTAS</p><h1>{reference || leadCode || 'Nueva cotización'}</h1><p>Cada paso actualiza el mismo ingreso. Solo “Completar reserva” entrega la información a Operaciones.</p></div>
-      <div className="sales-flow-total"><span>Total actual</span><strong>{clp(total)}</strong><small>{paxCount} pax · {draftServices.length} producto(s)</small></div>
+      <div><p className="eyebrow">FLUJO ÚNICO · LINK VENTAS</p><h1>{reference || (isIntake ? 'Propuesta de tour pendiente' : leadCode) || 'Nueva cotización'}</h1>{isIntake && <small className="sales-flow-code">Referencia interna: {leadCode}</small>}<p>Cada paso actualiza el mismo ingreso. Solo “Completar reserva” entrega la información a Operaciones.</p></div>
+      <div className="sales-flow-total"><span>Total actual</span><strong>{isIntake && !draftServices.length ? 'Pendiente' : clp(total)}</strong><small>{paxCount} pax · {draftServices.length} producto(s)</small></div>
     </section>
 
+    {isIntake && <section className="flow-card intake-proposal"><h2>Propuesta recibida · no confirmada</h2><p><strong>{request.product || 'Servicio pendiente'}</strong> · {request.modality || 'Modalidad pendiente'} · {request.pax ?? 'Cantidad pendiente'} pax</p><p>Fecha: {request.date || 'Pendiente'} · Hora: {request.time || 'Pendiente'} · Recogida: {request.pickup || 'Pendiente'}</p><p>Tarifa acordada: {request.agreedPrice == null ? 'Pendiente' : request.agreedPrice} · Moneda: {request.currency || 'Pendiente'} · Idioma: {request.language || 'Pendiente'}</p><p>La solicitud no crea servicios, cupos ni una carta valorizada. Los pasajeros conservan sus UUID y códigos originales.</p><details open><summary>{intakePending.length} datos pendientes para preparar la cotización</summary><ul>{intakePending.map(item => <li key={item}>{item}</li>)}</ul></details>{request.currency && request.currency !== 'CLP' && <p>La carta actual admite CLP. No se convertirá esta moneda automáticamente.</p>}</section>}
     <nav className="sales-stepper" aria-label="Proceso comercial">
       {steps.map(([number, label], index) => <button key={number} className={`${activeStep === index ? 'active ' : ''}${stageUnlocked(index) ? '' : 'locked'}`} disabled={!stageUnlocked(index)} onClick={() => setActiveStep(index)}><span>{number}</span><strong>{label}</strong>{index < activeStep || (index === 2 && quoteSent) || (index === 3 && paymentReady) || (index === 4 && itinerarySent) ? <Check size={14}/> : null}</button>)}
     </nav>
@@ -611,31 +640,31 @@ export default function SalesFlowForm({
       <FlowTitle number="01" title="Cotización e ingreso" text="Origen, arribo y responsable. Aquí nace una sola referencia comercial para todo el proceso."/>
       <div className="form-grid four">
         <label>Nombre de referencia · obligatorio<input value={reference} onChange={event => setReference(event.target.value)} placeholder="Ej. Familia Silva / REIFKE X8"/></label>
-        <label>Número de pax · obligatorio<input type="number" min="1" max="60" value={paxCount} onChange={event => setPaxCount(Math.max(1, Math.min(60, Number(event.target.value || 1))))}/></label>
+        <label>Número de pax · obligatorio<input type="number" min="1" max="60" disabled={isIntake} value={paxCount} onChange={event => setPaxCount(Math.max(1, Math.min(60, Number(event.target.value || 1))))}/></label>
         <label>Hotel / negocio<div className="inline-field-action"><select value={hotelId} onChange={event => setHotelId(event.target.value)}><option value="">Seleccionar…</option>{hotels.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="button ghost" type="button" onClick={() => setPartnerOpen(true)}><Building2 size={14}/></button></div></label>
         <label>Vendedor responsable<select value={sellerProfileId} onChange={event => setSellerProfileId(event.target.value)}><option value="">Seleccionar…</option>{availableSellers.map(item => <option key={item.id} value={item.id}>{item.full_name || item.email}</option>)}</select></label>
       </div>
       <div className="form-grid five">
-        <label>Canal<select value={channel} onChange={event => setChannel(event.target.value)}>{channels.map(item => <option key={item}>{item}</option>)}</select></label>
+        <label>Canal<select value={channel} onChange={event => setChannel(event.target.value)}><option value="">Pendiente</option>{channels.map(item => <option key={item}>{item}</option>)}</select></label>
         <label>Arribo<input type="date" value={checkin} onChange={event => setCheckin(event.target.value)}/></label>
         <label>Salida<input type="date" value={checkout} onChange={event => setCheckout(event.target.value)}/></label>
         <label>Días estadía<input type="number" min="0" value={stayDays ?? ''} onChange={event => setStayDays(event.target.value === '' ? null : Number(event.target.value))}/></label>
         <label>Prioridad<input readOnly value={priority}/></label>
       </div>
       <div className="form-grid two"><label>Contacto inicial<input value={contact} onChange={event => setContact(event.target.value)} placeholder="Teléfono o email"/></label><label>Nacionalidad<input value={nationality} onChange={event => { setNationality(event.target.value); patchPassenger(0, { nationality: event.target.value }); }}/></label></div>
-      <AutoPaxPreview reference={reference} count={paxCount}/>
-      <FlowActions busy={busy} onSave={() => void persist('data_capture')} onNext={() => void saveAndNext()} nextLabel="Guardar y comenzar datos"/>
+      {!isIntake && <AutoPaxPreview reference={reference} count={paxCount}/>} 
+      <FlowActions busy={busy} onSave={() => void saveInPlace('data_capture')} onNext={() => void saveAndNext()} nextLabel="Guardar y comenzar datos"/>
     </section>}
 
     {activeStep === 1 && <section className="flow-card">
       <FlowTitle number="02" title="Datos y número de pax" text="Los pasajeros ya existen por número. Solo completas sus nombres y datos cuando los tengas; no vuelves a crearlos uno a uno."/>
-      <div className="pax-auto-grid">{passengers.map((passenger, index) => <article key={index} className="pax-auto-card"><header><span>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</span><strong>{index === 0 ? 'Titular' : 'Acompañante'}</strong></header><div className="form-grid three"><label>Nombre<input value={passenger.full_name} onChange={event => patchPassenger(index, { full_name: event.target.value })} placeholder="Puede completarse después"/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div></article>)}</div>
-      <FlowActions busy={busy} onSave={() => void persist('data_capture')} onNext={async () => { setBusy(true); try { await persist('data_capture', true); setActiveStep(2); } catch (error: any) { setMessage(error?.message || 'No se pudo guardar.'); } finally { setBusy(false); } }} nextLabel="Armar cotización"/>
+      <div className="pax-auto-grid">{passengers.map((passenger, index) => <article key={index} className="pax-auto-card"><header><span>{isIntake ? (passenger as IntakePassenger).passenger_code || 'Cargando código original' : `${reference || 'RESERVA'} · P${String(index + 1).padStart(2, '0')}`}</span><strong>{passenger.is_primary ? 'Titular designado' : isIntake ? 'Principal no designado' : 'Acompañante'}</strong></header><div className="form-grid three"><label>Nombre<input value={passenger.full_name} onChange={event => patchPassenger(index, { full_name: event.target.value })} placeholder="Puede completarse después"/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div></article>)}</div>
+      <FlowActions busy={busy} onSave={() => void saveInPlace('data_capture')} onNext={async () => { setBusy(true); try { await persist('data_capture', true); setActiveStep(2); } catch (error: any) { setMessage(error?.message || 'No se pudo guardar.'); } finally { setBusy(false); } }} nextLabel="Armar cotización"/>
     </section>}
 
     {activeStep === 2 && <section className="flow-card">
-      <div className="flow-title-row"><FlowTitle number="03" title="Carta de cotización" text="Productos y precios viven dentro del mismo ingreso. Aquí también indicas exactamente qué pasajero participa en cada servicio."/><div className="top-actions"><button className="button ghost" onClick={addManualItem}><Plus size={15}/> Ítem manual</button><button className="button dark" onClick={() => setCatalogOpen(true)}><Boxes size={15}/> Catálogo</button></div></div>
-      {!draftServices.length ? <div className="empty-state">Agrega al menos un producto para crear la carta de cotización.</div> : <div className="quote-products">{draftServices.map((service, index) => {
+      <div className="flow-title-row"><FlowTitle number="03" title="Carta de cotización" text="Productos y precios viven dentro del mismo ingreso. Aquí también indicas exactamente qué pasajero participa en cada servicio."/><div className="top-actions"><button className="button ghost" disabled={!intakeCommercialReady} onClick={addManualItem}><Plus size={15}/> Ítem manual</button><button className="button dark" disabled={!intakeCommercialReady} onClick={() => setCatalogOpen(true)}><Boxes size={15}/> Catálogo</button></div></div>
+      {!draftServices.length ? <div className="empty-state">{isIntake && !intakeCommercialReady ? 'La solicitud aparece arriba como propuesta pendiente. Completa sus datos en la misma Ficha 360 antes de incorporar productos y emitir una carta valorizada.' : 'Agrega al menos un producto para crear la carta de cotización.'}</div> : <div className="quote-products">{draftServices.map((service, index) => {
         const product = products.find(item => item.id === service.product_id);
         const calc = economics(service.unit_price, service.pax, service.operator_cost, 0, 0);
         const selected = new Set(service.passenger_indexes || []);
@@ -655,7 +684,7 @@ export default function SalesFlowForm({
         </article>;
       })}</div>}
       {quote && <section className="quote-document-status"><div><FileText size={20}/><span><strong>{quote.quote_code}</strong><small>Versión {quote.version} · {quote.status}</small></span></div><div className="quote-policy-mini"><strong>Cancelación — resumen de la política vigente</strong>{concisePolicy(quote.policy_summary).slice(0, 5).map(item => <span key={item}>• {item}</span>)}</div><div className="top-actions"><button className="button ghost" onClick={() => void (async()=>{const options={hotelName:hotel?.name,clientName:passengers[0]?.full_name||reference};downloadCustomerQuote(quote,options);if(operationsUrl&&leadId){const pdf=buildCustomerQuotePdf(quote,options);await archivePdf({operationsUrl,leadId,documentType:'quote_pdf',title:`Cotización · ${quote.quote_code}`,category:'quote',fileName:pdf.fileName,doc:pdf.doc}).catch(error=>console.warn('Cotización sin respaldo central',error));}setMessage('PDF descargado y vinculado a la ficha documental.');})()}><Download size={15}/> PDF</button><button className="button dark" disabled={busy} onClick={() => void shareQuote()}><Send size={15}/> Compartir</button>{!quoteSent && <button className="button ghost" disabled={busy} onClick={() => void markSent()}>Registrar enviada</button>}</div></section>}
-      <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={() => void persist('data_capture')}>Guardar productos</button><button className="button dark big" disabled={busy || !draftServices.length} onClick={() => void generateQuote()}>{quote ? 'Crear nueva versión' : 'Crear carta cotización'} <FileText size={16}/></button>{quoteSent && !quoteAccepted && <button className="button dark big" disabled={busy} onClick={() => void acceptQuote()}><CheckCircle2 size={16}/> Cliente acepta</button>}</div>
+      <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy} onClick={() => void saveInPlace('data_capture')}>Guardar productos</button><button className="button dark big" disabled={busy || !draftServices.length || !intakeCommercialReady} onClick={() => void generateQuote()}>{quote ? 'Crear nueva versión' : 'Crear carta cotización'} <FileText size={16}/></button>{quoteSent && !quoteAccepted && <button className="button dark big" disabled={busy} onClick={() => void acceptQuote()}><CheckCircle2 size={16}/> Cliente acepta</button>}</div>
     </section>}
 
     {activeStep === 3 && <section className="flow-card">
@@ -667,7 +696,7 @@ export default function SalesFlowForm({
       </section>
       <div className="form-grid four"><label>Vuelo llegada <span>si aplica</span><input value={arrivalFlight} onChange={event => setArrivalFlight(event.target.value)} placeholder="JA 123"/></label><label>Vuelo salida <span>si aplica</span><input value={departureFlight} onChange={event => setDepartureFlight(event.target.value)} placeholder="LA 456"/></label><label>Punto de recogida<input value={pickupLocation} onChange={event => setPickupLocation(event.target.value)} placeholder="Hotel / aeropuerto / dirección"/></label><label>Habitación <span>si aplica</span><input value={hotelRoom} onChange={event => setHotelRoom(event.target.value)}/></label></div>
       <div className="operational-note"><strong>Datos para parques y manifiestos</strong><span>Género, discapacidad y observaciones se guardan solo cuando son declarados. No se infieren.</span></div>
-      <div className="full-passenger-stack">{passengers.map((passenger, index) => <article key={index}><header><Users size={15}/><strong>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</strong></header><div className="form-grid four"><label>Nombre(s)<input value={passenger.first_name || ''} onChange={event => patchPassengerName(index, 'first_name', event.target.value)} placeholder={passenger.full_name || 'Nombre'}/></label><label>Apellido(s)<input value={passenger.last_name || ''} onChange={event => patchPassengerName(index, 'last_name', event.target.value)}/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div><div className="form-grid four"><label>Nacionalidad<input value={passenger.nationality} onChange={event => patchPassenger(index, { nationality: event.target.value })}/></label><label>Tipo documento<select value={passenger.document_type} onChange={event => patchPassenger(index, { document_type: event.target.value })}><option>Pasaporte</option><option>Cédula</option><option>Otro</option></select></label><label>N° documento<input value={passenger.document_number} onChange={event => patchPassenger(index, { document_number: event.target.value })}/></label><label>Nacimiento<input type="date" value={passenger.birth_date} onChange={event => patchPassenger(index, { birth_date: event.target.value })}/></label></div><div className="form-grid three"><label>Género declarado<select value={passenger.gender || ''} onChange={event => patchPassenger(index, { gender: event.target.value })}><option value="">Sin informar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="X">Otro / X</option></select></label><label>Restricciones alimentarias<input value={passenger.dietary_restrictions} onChange={event => patchPassenger(index, { dietary_restrictions: event.target.value })} placeholder="Ninguna / detalle"/></label><label>Discapacidad / movilidad <span>si corresponde</span><input value={passenger.disability_type || ''} onChange={event => patchPassenger(index, { disability_type: event.target.value })} placeholder="Física, sensorial, apoyo requerido…"/></label></div><label>Observaciones médicas o de movilidad<textarea value={passenger.medical_notes || ''} onChange={event => patchPassenger(index, { medical_notes: event.target.value })} placeholder="Solo información necesaria para ejecutar el servicio"/></label></article>)}</div>
+      <div className="full-passenger-stack">{passengers.map((passenger, index) => <article key={index}><header><Users size={15}/><strong>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</strong></header><div className="form-grid four"><label>Nombre(s)<input value={passenger.first_name || ''} onChange={event => patchPassengerName(index, 'first_name', event.target.value)} placeholder={passenger.full_name || 'Nombre'}/></label><label>Apellido(s)<input value={passenger.last_name || ''} onChange={event => patchPassengerName(index, 'last_name', event.target.value)}/></label><label>Email<input type="email" value={passenger.email} onChange={event => patchPassenger(index, { email: event.target.value })}/></label><label>Teléfono<input value={passenger.phone} onChange={event => patchPassenger(index, { phone: event.target.value })}/></label></div><div className="form-grid four"><label>Nacionalidad<input value={passenger.nationality} onChange={event => patchPassenger(index, { nationality: event.target.value })}/></label><label>Tipo documento<select value={passenger.document_type} onChange={event => patchPassenger(index, { document_type: event.target.value })}><option value="">Pendiente</option><option>Pasaporte</option><option>Cédula</option><option>Otro</option></select></label><label>N° documento<input value={passenger.document_number} onChange={event => patchPassenger(index, { document_number: event.target.value })}/></label><label>Nacimiento<input type="date" value={passenger.birth_date} onChange={event => patchPassenger(index, { birth_date: event.target.value })}/></label></div><div className="form-grid three"><label>Género declarado<select value={passenger.gender || ''} onChange={event => patchPassenger(index, { gender: event.target.value })}><option value="">Sin informar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="X">Otro / X</option></select></label><label>Restricciones alimentarias<input value={passenger.dietary_restrictions} onChange={event => patchPassenger(index, { dietary_restrictions: event.target.value })} placeholder="Ninguna / detalle"/></label><label>Discapacidad / movilidad <span>si corresponde</span><input value={passenger.disability_type || ''} onChange={event => patchPassenger(index, { disability_type: event.target.value })} placeholder="Física, sensorial, apoyo requerido…"/></label></div><label>Observaciones médicas o de movilidad<textarea value={passenger.medical_notes || ''} onChange={event => patchPassenger(index, { medical_notes: event.target.value })} placeholder="Solo información necesaria para ejecutar el servicio"/></label></article>)}</div>
       <label>Observaciones generales<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Acuerdos y datos relevantes para completar la reserva"/></label>
       <FlowActions busy={busy} onSave={() => void persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : paymentReady ? 'payment_coordinated' : 'accepted_payment')} onNext={async () => { setBusy(true); try { await persist(paymentSent || paymentCoordination === 'link_sent' ? 'payment_link_sent' : paymentReady ? 'payment_coordinated' : 'accepted_payment', true); if (!paymentReady) throw new Error('Comparte una URL real de cobro o elige “Continuar sin link”.'); setActiveStep(4); } catch (error: any) { setMessage(error?.message || 'No se pudo avanzar.'); } finally { setBusy(false); } }} nextLabel="Preparar itinerario"/>
     </section>}
@@ -675,7 +704,7 @@ export default function SalesFlowForm({
     {activeStep === 4 && <section className="flow-card">
       <FlowTitle number="05" title="Confirmación e itinerario al pasajero" text="El itinerario se construye con los mismos productos, fechas, modalidad y datos ya ingresados. Puedes descargarlo en PDF o enviarlo sin volver a escribir la reserva."/>
       <div className="itinerary-preview"><header><div><Mail size={18}/><span><strong>{reference || leadCode}</strong><small>{passengers[0]?.email || 'Email principal pendiente'}</small></span></div></header><pre>{itineraryBody()}</pre></div>
-      <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy || !draftServices.length} onClick={downloadItineraryPdf}><Download size={16}/> Descargar itinerario PDF</button><button className="button dark big" disabled={busy || !passengers[0]?.email} onClick={() => void sendItinerary()}><Mail size={16}/> Enviar itinerario por email</button><button className="button ghost big" disabled={busy} onClick={() => void markItineraryExternal()}>Registrar envío externo</button></div>
+      <div className="flow-bottom-actions"><button className="button ghost big" disabled={busy || !draftServices.length || !intakeCommercialReady} onClick={downloadItineraryPdf}><Download size={16}/> Descargar itinerario PDF</button><button className="button dark big" disabled={busy || !passengers[0]?.email} onClick={() => void sendItinerary()}><Mail size={16}/> Enviar itinerario por email</button><button className="button ghost big" disabled={busy} onClick={() => void markItineraryExternal()}>Registrar envío externo</button></div>
     </section>}
 
     {activeStep === 5 && <section className="flow-card final-flow-card">
@@ -702,4 +731,4 @@ function FlowActions({ busy, onSave, onNext, nextLabel }: { busy: boolean; onSav
 
 function AutoPaxPreview({ reference, count }: { reference: string; count: number }) {
   return <div className="auto-pax-preview"><div><Users size={17}/><span><strong>Pasajeros preparados automáticamente</strong><small>El número de pax crea los códigos; los nombres reales se completan después.</small></span></div><div>{Array.from({ length: Math.min(count, 12) }, (_, index) => <span key={index}>{reference || 'RESERVA'} · P{String(index + 1).padStart(2, '0')}</span>)}{count > 12 && <span>+{count - 12} pax</span>}</div></div>;
-}
+                                              }
