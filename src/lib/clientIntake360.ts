@@ -27,7 +27,7 @@ export function intakeMissing(lead: Pick<Lead, 'hotel_partner_id' | 'assigned_to
   const missing: string[] = [];
   if (!lead?.hotel_partner_id) missing.push('Hotel / origen');
   if (!lead?.assigned_to) missing.push('Vendedor responsable');
-  if (!lead?.contacto && !people.some(person => person.email.trim() || person.phone.trim())) missing.push('Contacto del cliente');
+  if (!lead?.contacto && !people.some(person => (person.email ?? '').trim() || (person.phone ?? '').trim())) missing.push('Contacto del cliente');
   if (!people.length) missing.push('Pasajeros');
   if (!people.some(person => person.is_primary)) missing.push('Pasajero principal');
   people.forEach((person, index) => {
@@ -36,15 +36,15 @@ export function intakeMissing(lead: Pick<Lead, 'hotel_partner_id' | 'assigned_to
       if (!person[field]?.trim()) missing.push(`${label}: ${title}`);
     }
   });
-  if (!request.product.trim()) missing.push('Servicio solicitado');
-  if (!request.modality.trim()) missing.push('Modalidad');
+  if (!(request.product ?? '').trim()) missing.push('Servicio solicitado');
+  if (!(request.modality ?? '').trim()) missing.push('Modalidad');
   if (request.pax === null) missing.push('Cantidad de pasajeros del servicio');
   if (!request.date) missing.push('Fecha del servicio');
   if (!request.time) missing.push('Hora del servicio');
-  if (!request.pickup.trim()) missing.push('Recogida');
-  if (!request.language.trim()) missing.push('Idioma');
+  if (!(request.pickup ?? '').trim()) missing.push('Recogida');
+  if (!(request.language ?? '').trim()) missing.push('Idioma');
   if (request.agreedPrice === null) missing.push('Tarifa acordada');
-  if (!request.currency.trim()) missing.push('Moneda');
+  if (!(request.currency ?? '').trim()) missing.push('Moneda');
   return missing;
 }
 
@@ -56,3 +56,4 @@ export function intakePayload(lead: Lead | null, people: IntakePassenger[], requ
   if (request.agreedPrice !== null && (!Number.isFinite(request.agreedPrice) || request.agreedPrice < 0)) throw new Error('Tarifa no válida.');
   return { lead_id: lead?.id ?? null, expected_updated_at: lead?.updated_at ?? null, contact: contact.trim() || null, request, passengers: people.map(person => ({ id: person.id ?? null, expected_updated_at: person.updated_at ?? null, full_name: person.full_name.trim(), email: person.email.trim() || null, phone: person.phone.trim() || null, nationality: person.nationality.trim() || null, document_type: person.document_type.trim() || null, document_number: person.document_number.trim() || null, birth_date: person.birth_date || null, dietary_restrictions: person.dietary_restrictions.trim() || null, medical_notes: person.medical_notes?.trim() || null, disability_type: person.disability_type?.trim() || null, is_primary: person.is_primary })) };
 }
+
