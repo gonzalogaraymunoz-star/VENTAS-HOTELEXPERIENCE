@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import type { Profile } from './types';
 import LoginScreen from './components/LoginScreen';
 import SalesAppV2 from './components/SalesAppV2';
 import PendingClientTasks from './components/PendingClientTasks';
-import PartnerPortal from './components/PartnerPortal';
+const PartnerPortal = lazy(() => import('./components/PartnerPortal'));
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -42,7 +42,7 @@ export default function App() {
     return () => { alive = false; };
   }, [session?.user.id]);
 
-  if (routeHash === '#/escritorio') return <PartnerPortal />;
+  if (routeHash === '#/escritorio') return <Suspense fallback={<div className="center-screen"><div className="brand-mark">LINK</div><p>Abriendo escritorio…</p></div>}><PartnerPortal /></Suspense>;
   if (session === undefined) return <div className="center-screen"><div className="brand-mark">LINK</div><p>Conectando ventas…</p></div>;
   if (!session) return <><LoginScreen /><a href="#/escritorio" style={{position:'fixed',right:24,bottom:20,zIndex:50,fontSize:12,fontWeight:800,color:'#242424',background:'#fff',border:'1px solid #dedbd5',borderRadius:999,padding:'11px 15px',textDecoration:'none',boxShadow:'0 8px 24px rgba(0,0,0,.08)'}}>Acceso de recepción y vendedores →</a></>;
   if (!profile) return <div className="center-screen"><div className="brand-mark">LINK</div><p>Preparando tu espacio comercial…</p></div>;
