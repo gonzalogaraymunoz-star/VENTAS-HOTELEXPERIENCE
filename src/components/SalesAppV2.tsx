@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban } from 'lucide-react';
+import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban, Store, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
 import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, SellableTourDeparture, Supplier } from '../types';
@@ -10,8 +10,9 @@ import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
 import TourSalesBoard from './TourSalesBoard';
 import ClientFicha360 from './ClientFicha360';
+import PartnerAccountsAdmin from './PartnerAccountsAdmin';
 
-type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
+type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments' | 'seller-desk' | 'access-admin';
 
 type PendingResolution={taskKey:string;title:string;detail:string;step:number;destination:string};
 
@@ -96,6 +97,8 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
     { id: 'new-sale', label: 'Cotización e ingreso', icon: ShoppingBag },
     { id: 'tours', label: 'Tours / Operaciones', icon: Route },
     { id: 'catalog', label: 'Catálogo', icon: BookOpen },
+    { id: 'seller-desk', label: 'Escritorio vendedor', icon: Store },
+    ...(profile.role === 'admin' ? [{ id: 'access-admin' as Screen, label: 'Accesos', icon: ShieldCheck }] : []),
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
     { id: 'products', label: 'Productos', icon: Boxes },
@@ -114,7 +117,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-head"><div className="brand-mark inverse">LINK</div><button className="icon-button sidebar-close" onClick={() => setMobileOpen(false)}><X size={19}/></button></div>
       <div className="product-name"><strong>Ventas</strong><span>HOTEL EXPERIENCE</span></div>
-      <nav>{nav.map(item => <button key={item.id} className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => item.id === 'new-sale' ? newIntake() : go(item.id)}><item.icon size={18}/><span>{item.label}</span></button>)}</nav>
+      <nav>{nav.map(item => <button key={item.id} className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => { if(item.id==='new-sale') newIntake(); else if(item.id==='seller-desk'){ window.location.hash='#/escritorio'; setMobileOpen(false); } else go(item.id); }}><item.icon size={18}/><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-spacer"/>
       {operationsUrl && <a className="nav-item" href={operationsUrl} target="_blank" rel="noreferrer"><ExternalLink size={18}/><span>Ir a Operaciones</span></a>}
       <button className="nav-item" onClick={() => supabase.auth.signOut()}><LogOut size={18}/><span>Cerrar sesión</span></button>
@@ -141,6 +144,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
+          {screen === 'access-admin' && profile.role === 'admin' && <PartnerAccountsAdmin/>}
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
         </>}
       </section>
@@ -159,5 +163,7 @@ function titleFor(screen: Screen) {
     pipeline: 'Pipeline comercial',
     products: 'Productos y tarifas',
     payments: 'Cobros y documentos',
+    'seller-desk': 'Escritorio vendedor',
+    'access-admin': 'Administración de accesos',
   } as Record<Screen, string>)[screen];
 }
