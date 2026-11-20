@@ -37,6 +37,7 @@ export default function LoginScreen() {
         <label>Contraseña<input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} autoComplete="current-password" required /></label>
         {error && <div className="error-box">{error}</div>}
         <button className="button dark wide" disabled={loading}>{loading ? 'Ingresando…' : <>Ingresar <ArrowRight size={17}/></>}</button>
+        <a href="#/escritorio" style={{display:'block',marginTop:14,textAlign:'center',fontSize:12,fontWeight:700,color:'inherit'}}>Acceso de recepción y vendedores →</a>
       </form>
     </section>
   </main>;
