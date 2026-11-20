@@ -5,10 +5,18 @@ import type { Profile } from './types';
 import LoginScreen from './components/LoginScreen';
 import SalesAppV2 from './components/SalesAppV2';
 import PendingClientTasks from './components/PendingClientTasks';
+import PartnerPortal from './components/PartnerPortal';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [routeHash, setRouteHash] = useState(window.location.hash);
+
+  useEffect(() => {
+    const onHashChange = () => setRouteHash(window.location.hash);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +42,7 @@ export default function App() {
     return () => { alive = false; };
   }, [session?.user.id]);
 
+  if (routeHash === '#/escritorio') return <PartnerPortal />;
   if (session === undefined) return <div className="center-screen"><div className="brand-mark">LINK</div><p>Conectando ventas…</p></div>;
   if (!session) return <LoginScreen />;
   if (!profile) return <div className="center-screen"><div className="brand-mark">LINK</div><p>Preparando tu espacio comercial…</p></div>;
