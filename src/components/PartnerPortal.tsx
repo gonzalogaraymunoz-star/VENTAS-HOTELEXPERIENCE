@@ -94,7 +94,8 @@ export default function PartnerPortal(){
           }
         }
       }catch(_error){
-        // The login screen remains available when no valid portal session exists.
+        // An absent or expired session should leave a clean login screen.
+        setError('');
       }finally{setChecking(false)}
     })();
     return()=>{
