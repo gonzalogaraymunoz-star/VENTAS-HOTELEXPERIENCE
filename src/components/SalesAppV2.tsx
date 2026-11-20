@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban, Store, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
@@ -10,7 +10,7 @@ import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
 import TourSalesBoard from './TourSalesBoard';
 import ClientFicha360 from './ClientFicha360';
-import PartnerAccountsAdmin from './PartnerAccountsAdmin';
+const PartnerAccountsAdmin = lazy(() => import('./PartnerAccountsAdmin'));
 
 type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments' | 'seller-desk' | 'access-admin';
 
@@ -144,7 +144,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
-          {screen === 'access-admin' && profile.role === 'admin' && <PartnerAccountsAdmin/>}
+          {screen === 'access-admin' && profile.role === 'admin' && <Suspense fallback={<div className="loading-panel">Cargando permisos…</div>}><PartnerAccountsAdmin/></Suspense>}
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
         </>}
       </section>
