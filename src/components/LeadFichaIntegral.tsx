@@ -71,21 +71,23 @@ export default function LeadFichaIntegral({ leadId, sellers, onClose }: Props) {
       const passengerIds = pax.map(person => String(person.id)).filter(Boolean);
       const serviceIds = serviceRows.map(service => String(service.id)).filter(Boolean);
       const departureIds = Array.from(new Set(serviceRows.map(service => String(service.departure_id || '')).filter(Boolean)));
-      const [assignmentRows, supplierRows, peopleRows, vehicleRows, servicePaxRows, foodRows, riskDocs] = await Promise.all([
+      const [assignmentRows, servicePaxRows, foodRows, riskDocs] = await Promise.all([
         serviceIds.length ? readRows('service_assignments', q => q.in('lead_service_id', serviceIds)) : Promise.resolve([]),
-        readRows('suppliers', q => q),
-        readRows('service_people', q => q),
-        readRows('vehicles', q => q),
         serviceIds.length ? readRows('lead_service_passengers', q => q.in('lead_service_id', serviceIds)) : Promise.resolve([]),
         departureIds.length ? readRows('tour_food_segments', q => q.in('departure_id', departureIds)) : Promise.resolve([]),
         passengerIds.length ? readRows('operational_entity_documents', q => q.in('entity_id', [leadId, ...passengerIds])) : readRows('operational_entity_documents', q => q.eq('entity_id', leadId)),
       ]);
-      setAssignments(assignmentRows); setSuppliers(supplierRows); setServicePeople(peopleRows); setVehicles(vehicleRows); setServicePassengerLinks(servicePaxRows); setFoodSegments(foodRows); setOperationalDocuments(riskDocs);
       const segmentIds = foodRows.map(segment => String(segment.id)).filter(Boolean);
-      const foodPaxRows = await (
-        segmentIds.length ? readRows('tour_food_passengers', q => q.in('segment_id', segmentIds)) : Promise.resolve([])
-      );
-      setFoodPassengers(foodPaxRows);
+      const foodPaxRows = segmentIds.length ? await readRows('tour_food_passengers', q => q.in('segment_id', segmentIds)) : [];
+      const supplierIds = Array.from(new Set([...assignmentRows, ...foodRows].map(row => String(row.supplier_id || '')).filter(Boolean)));
+      const peopleIds = Array.from(new Set(assignmentRows.flatMap(row => [row.coordinator_person_id, row.guide_person_id, row.driver_person_id, row.cook_person_id]).map(value => String(value || '')).filter(Boolean)));
+      const vehicleIds = Array.from(new Set(assignmentRows.map(row => String(row.vehicle_id || '')).filter(Boolean)));
+      const [supplierRows, peopleRows, vehicleRows] = await Promise.all([
+        supplierIds.length ? readRows('suppliers', q => q.in('id', supplierIds)) : Promise.resolve([]),
+        peopleIds.length ? readRows('service_people', q => q.in('id', peopleIds)) : Promise.resolve([]),
+        vehicleIds.length ? readRows('vehicles', q => q.in('id', vehicleIds)) : Promise.resolve([]),
+      ]);
+      setAssignments(assignmentRows); setSuppliers(supplierRows); setServicePeople(peopleRows); setVehicles(vehicleRows); setServicePassengerLinks(servicePaxRows); setFoodSegments(foodRows); setOperationalDocuments(riskDocs); setFoodPassengers(foodPaxRows);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'No fue posible abrir esta ficha con los permisos actuales.');
     } finally { setLoading(false); }
