@@ -4,6 +4,7 @@ import { emptyIntakePassenger, emptyRequest, intakeMissing, intakePayload, optio
 import type { IntakePassenger, IntakeRequest } from '../lib/clientIntake360';
 import type { Lead, LeadService, HotelPartner, SellerProfile } from '../types';
 import './ClientFicha360.css';
+import LeadFichaIntegral from './LeadFichaIntegral';
 
 type IntakeLead = Lead & { intake_request?: Partial<IntakeRequest> | null };
 export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClose, onSaved }: { leadId?: string; canEdit: boolean; hotels: HotelPartner[]; sellers: SellerProfile[]; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -78,6 +79,8 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       setRequest(current => ({ ...current, [key]: key === 'agreedPrice' ? optionalAmount(raw) : key === 'pax' ? (raw === '' ? null : Number(raw)) : raw }));
     }}/></label>;
   }
+  if (leadId && lead && loaded) return <LeadFichaIntegral leadId={leadId} sellers={sellers} onClose={onClose}/>;
+
   return <div className="ficha360 screen-stack">
     <header className="page-heading"><div><p className="eyebrow">CLIENTES · FICHA 360</p><h1>{lead ? (lead.codigo && lead.codigo.length <= 14 ? lead.codigo : (people.map(person => person.full_name?.trim()).filter(Boolean).join(' \u00b7 ') || contact.trim() || 'Ficha nueva')) : (leadId ? 'Cargando ficha' : 'Nueva ficha parcial')}</h1>{lead?.codigo && lead.codigo.length > 14 ? <p className="ficha360-ref">Referencia {lead.codigo}</p> : null}<p>Datos de cliente y pasajeros. Guardar no confirma servicios ni entrega una reserva a Operaciones.</p></div><button className="button ghost" onClick={onClose}>Volver a Clientes</button></header>
     <div className="ficha360-access">Acceso interno del CRM: roles autorizados y agentes con acceso al expediente. Este enlace no permite acceso anónimo. No se envían mensajes, pagos, cupos ni carpetas de Drive.</div>
