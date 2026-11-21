@@ -1,6 +1,6 @@
 import {
   crmUserFrom,destroyPartnerSession,getPartnerSession,issuePartnerSession,noStore,
-  isPreviewSafe,previewAdminFrom,previewHotels,publicAccount,setupAdmin,verifyPassword
+  isPreviewSafe,previewHotels,publicAccount,setupAdmin,verifyPassword
 } from './partner-portal.js';
 import { resolveCatalogService,resolveTv12Service } from './tv12-pricing.js';
 
@@ -179,14 +179,31 @@ export default async function handler(req,res,env){
     const area=String(req.query?.area||'').toLowerCase();
     if(isPreviewSafe(env)){
       if(area==='auth'&&req.method==='GET')return res.status(401).json({authenticated:false,preview_safe:true});
-      if(area==='auth')return res.status(403).json({error:'La vista previa segura no permite iniciar cuentas de recepción ni modificar sesiones.'});
-      const {user,profile}=await previewAdminFrom(req,env);
+      if(area==='auth')return res.status(403).json({error:'La vista previa DEMO no admite autenticación ni sesiones reales.'});
+      if(req.method!=='GET')return res.status(403).json({error:'La vista previa DEMO es local y no admite escrituras en el servidor.'});
+      const hotels=previewHotels();
+      const leads=[
+        {
+          id:'demo-lead-001',codigo:'DEMO-FAU-001',reserva:'Valle de la Luna · Grupo demostrativo',
+          numero_pax:3,contacto:'Contacto ficticio · sin datos personales',empresa_ejecuta:'Hotel Fauna',
+          estado:'Solicitud DEMO · pendiente',estado_raw:'nuevo',created_at:'2026-11-18T14:00:00.000Z',
+          hotel_partner_id:'demo-hotel-fauna',
+          services:[{id:'demo-service-001',producto:'Valle de la Luna',fecha_servicio:'2026-12-05',numero_pax:3,estado:'Pendiente · DEMO',idioma:'Español',hotel_partner_id:'demo-hotel-fauna'}]
+        },
+        {
+          id:'demo-lead-002',codigo:'DEMO-SOL-002',reserva:'Astronómico · Grupo demostrativo',
+          numero_pax:2,contacto:'Contacto ficticio · sin datos personales',empresa_ejecuta:'Hotel Casa Solcor',
+          estado:'Solicitud DEMO · pendiente',estado_raw:'nuevo',created_at:'2026-11-19T10:30:00.000Z',
+          hotel_partner_id:'demo-hotel-casa-solcor',
+          services:[{id:'demo-service-002',producto:'Tour Astronómico',fecha_servicio:'2026-12-06',numero_pax:2,estado:'Pendiente · DEMO',idioma:'Português',hotel_partner_id:'demo-hotel-casa-solcor'}]
+        }
+      ];
       return res.status(200).json({
-        identity:{mode:'admin',name:profile.full_name||user.email||'Administración',email:user.email||'',role:'admin',can_create_requests:true},
-        hotels:previewHotels(),catalogExtras:[],
-        summary:{total:0,confirmed:0,pending:0,quoted:0},leads:[],
+        identity:{mode:'admin',name:'Administración DEMO',email:'demo@link-ventas.invalid',role:'admin',can_create_requests:true},
+        hotels,catalogExtras:[],
+        summary:{total:leads.length,confirmed:0,pending:leads.length,quoted:0},leads,
         preview_safe:true,
-        preview_notice:'Entorno de prueba aislado. Los datos y solicitudes son demostrativos y no se conectan a registros comerciales.'
+        preview_notice:'Identidad y registros ficticios. No se reciben tokens, no se consulta Supabase y no se escribe en sistemas reales.'
       });
     }
     const admin=setupAdmin(env);
