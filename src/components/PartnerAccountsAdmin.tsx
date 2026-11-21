@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {Building2,Copy,KeyRound,Plus,RefreshCw,RotateCcw,ShieldCheck,UserRound,Store,UserPlus} from 'lucide-react';
-import {supabase} from '../lib/supabase';
+const isDemoPreviewHost=window.location.hostname.endsWith('.link-ventas-hotel.pages.dev')&&window.location.hostname!=='link-ventas-hotel.pages.dev';
 import './PartnerPortal.css';
 
 type Hotel={id:string;name:string;slug:string;lead_prefix:string};
@@ -23,11 +23,17 @@ export default function PartnerAccountsAdmin(){
   const [sellerForm,setSellerForm]=useState({name:'',email:'',hotelIds:[] as string[]});
 
   const request=async(method:string,body?:any)=>{
-    const {data:{session}}=await supabase.auth.getSession();
-    if(!session?.access_token)throw new Error('La sesión administrativa expiró.');
+    if(isDemoPreviewHost&&method!=='GET')throw new Error('La administración DEMO es de solo lectura.');
+    const headers:Record<string,string>={};
+    if(!isDemoPreviewHost){
+      const {data:{session}}=await import('../lib/supabase').then(module=>module.supabase.auth.getSession());
+      if(!session?.access_token)throw new Error('La sesión administrativa expiró.');
+      headers.Authorization='Bearer '+session.access_token;
+    }
+    if(body)headers['Content-Type']='application/json';
     const response=await fetch('/api/partner-admin',{
       method,
-      headers:{Authorization:'Bearer '+session.access_token,...(body?{'Content-Type':'application/json'}:{})},
+      headers,
       ...(body?{body:JSON.stringify(body)}:{})
     });
     const result=await response.json();
