@@ -197,35 +197,54 @@ export default function PartnerPortal(){
 
   if(checking)return <main className="partner-shell"><div className="partner-loading">Preparando Hotel Experience…</div></main>;
 
-  if(!identity||!data)return <main className="partner-shell partner-login-page">
-    <section className="partner-login">
-      <div className="partner-login-copy">
-        <span className="partner-eyebrow">LINK VENTAS · BY HOTEL EXPERIENCE</span>
-        <h1>Un solo espacio para cotizar y registrar solicitudes.</h1>
-        <p>Consulta productos, compara tramos TV1.2 y registra solicitudes para los hoteles autorizados. Cada punto de venta queda limitado a su hotel; cada vendedor, a sus hoteles asignados.</p>
-        <div className="partner-security"><ShieldCheck size={18}/><span>Las solicitudes no confirman reservas ni generan cobros o mensajes. Los precios internos y comisiones no se muestran.</span></div>
-      </div>
-      <form className="partner-login-card" onSubmit={login}>
-        <div className="partner-login-icon"><KeyRound size={20}/></div>
-        <span className="partner-eyebrow">ACCESO COMPARTIDO</span>
-        <h2>Ingresa a tu espacio</h2>
-        <div className="partner-login-modes">
-          <button type="button" className={loginMode==='hotel'?'active':''} onClick={()=>{setLoginMode('hotel');setError('')}}><Hotel size={14}/> Recepción</button>
-          <button type="button" className={loginMode==='seller'?'active':''} onClick={()=>{setLoginMode('seller');setError('')}}><UserRound size={14}/> Vendedor</button>
+  if(!identity||!data){
+    if(isPagesPreviewHost)return <main className="partner-shell partner-login-page">
+      <section className="partner-login">
+        <div className="partner-login-copy">
+          <span className="partner-eyebrow">LINK VENTAS · PRUEBA SEGURA</span>
+          <h1>Usa tu sesión actual de administración.</h1>
+          <p>Esta dirección de vista previa no comparte el almacenamiento de sesión con LINK Ventas. Ábrela desde la aplicación principal con el botón «Probar escritorio seguro» para transferir una sesión temporal, sin volver a escribir tu contraseña.</p>
+          <div className="partner-security"><ShieldCheck size={18}/><span>No se envían tokens por URL ni se guardan en este navegador. La prueba solo consulta tu perfil bajo RLS; las solicitudes DEMO quedan locales.</span></div>
         </div>
-        {loginMode==='hotel'?<>
-          <label><span>Código de hotel</span><input value={accessCode} onChange={e=>setAccessCode(e.target.value.toUpperCase())} placeholder="Código asignado" autoComplete="username"/></label>
-          <label><span>Contraseña</span><input type="password" value={partnerPassword} onChange={e=>setPartnerPassword(e.target.value)} placeholder="Contraseña asignada" autoComplete="current-password"/></label>
-        </>:<>
-          <label><span>Correo de vendedor</span><input type="email" value={sellerEmail} onChange={e=>setSellerEmail(e.target.value)} placeholder="correo@ejemplo.com" autoComplete="username"/></label>
-          <label><span>Contraseña</span><input type="password" value={sellerPassword} onChange={e=>setSellerPassword(e.target.value)} placeholder="Contraseña de LINK" autoComplete="current-password"/></label>
-        </>}
-        {error&&<div className="partner-error">{error}</div>}
-        <button disabled={loading||(loginMode==='hotel'?(!accessCode.trim()||!partnerPassword):(!sellerEmail.trim()||!sellerPassword))}>{loading?'Validando…':<>Ingresar <ArrowRight size={16}/></>}</button>
-        <small>Vendedores: correo y contraseña individuales. Puntos de venta: código y contraseña propios, limitados a un hotel.</small><a className="partner-back-link" href="#/">Volver a LINK Ventas</a>
-      </form>
-    </section>
-  </main>;
+        <div className="partner-login-card">
+          <div className="partner-login-icon"><ShieldCheck size={20}/></div>
+          <span className="partner-eyebrow">ACCESO CON SESIÓN EXISTENTE</span>
+          <h2>{handoffWaiting?'Esperando la sesión de LINK Ventas…':'Abre la prueba desde LINK Ventas'}</h2>
+          <p>{handoffWaiting?'La ventana está lista. Vuelve a LINK Ventas; la sesión se transferirá de forma directa y temporal.':'No introduzcas otra contraseña aquí. Primero entra a LINK Ventas como lo haces normalmente y usa «Probar escritorio seguro».'}</p>
+          <a className="partner-primary" href={PREVIEW_PRODUCTION_ORIGIN}>Abrir LINK Ventas</a>
+        </div>
+      </section>
+    </main>;
+    return <main className="partner-shell partner-login-page">
+      <section className="partner-login">
+        <div className="partner-login-copy">
+          <span className="partner-eyebrow">LINK VENTAS · BY HOTEL EXPERIENCE</span>
+          <h1>Un solo espacio para cotizar y registrar solicitudes.</h1>
+          <p>Consulta productos, compara tramos TV1.2 y registra solicitudes para los hoteles autorizados. Cada punto de venta queda limitado a su hotel; cada vendedor, a sus hoteles asignados.</p>
+          <div className="partner-security"><ShieldCheck size={18}/><span>Las solicitudes no confirman reservas ni generan cobros o mensajes. Los precios internos y comisiones no se muestran.</span></div>
+        </div>
+        <form className="partner-login-card" onSubmit={login}>
+          <div className="partner-login-icon"><KeyRound size={20}/></div>
+          <span className="partner-eyebrow">ACCESO COMPARTIDO</span>
+          <h2>Ingresa a tu espacio</h2>
+          <div className="partner-login-modes">
+            <button type="button" className={loginMode==='hotel'?'active':''} onClick={()=>{setLoginMode('hotel');setError('')}}><Hotel size={14}/> Recepción</button>
+            <button type="button" className={loginMode==='seller'?'active':''} onClick={()=>{setLoginMode('seller');setError('')}}><UserRound size={14}/> Vendedor</button>
+          </div>
+          {loginMode==='hotel'?<>
+            <label><span>Código de hotel</span><input value={accessCode} onChange={e=>setAccessCode(e.target.value.toUpperCase())} placeholder="Código asignado" autoComplete="username"/></label>
+            <label><span>Contraseña</span><input type="password" value={partnerPassword} onChange={e=>setPartnerPassword(e.target.value)} placeholder="Contraseña asignada" autoComplete="current-password"/></label>
+          </>:<>
+            <label><span>Correo de vendedor</span><input type="email" value={sellerEmail} onChange={e=>setSellerEmail(e.target.value)} placeholder="correo@ejemplo.com" autoComplete="username"/></label>
+            <label><span>Contraseña</span><input type="password" value={sellerPassword} onChange={e=>setSellerPassword(e.target.value)} placeholder="Contraseña de LINK" autoComplete="current-password"/></label>
+          </>}
+          {error&&<div className="partner-error">{error}</div>}
+          <button disabled={loading||(loginMode==='hotel'?(!accessCode.trim()||!partnerPassword):(!sellerEmail.trim()||!sellerPassword))}>{loading?'Validando…':<>Ingresar <ArrowRight size={16}/></>}</button>
+          <small>Vendedores: correo y contraseña individuales. Puntos de venta: código y contraseña propios, limitados a un hotel.</small><a className="partner-back-link" href="#/">Volver a LINK Ventas</a>
+        </form>
+      </section>
+    </main>;
+  }
 
   const selectedHotel=data.hotels.find(hotel=>hotel.id===selectedHotelId)||data.hotels[0];
   const visibleLeads=data.leads.filter(lead=>lead.hotel_partner_id===selectedHotelId);
