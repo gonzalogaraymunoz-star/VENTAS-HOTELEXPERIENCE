@@ -162,7 +162,8 @@ export default function PartnerPortal(){
 
   async function logout(){
     if(identity?.mode==='admin'){
-      window.location.hash='';
+      if(isPagesPreviewHost)window.location.href=PREVIEW_PRODUCTION_ORIGIN;
+      else window.location.hash='';
       return;
     }
     if(identity?.mode==='seller'){
