@@ -30,6 +30,30 @@ async function derivePassword(password,salt,iterations,length=32){
   const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations,hash:'SHA-256'},key,length*8);
   return new Uint8Array(bits);
 }
+// Preview and local branches fail closed: no privileged database client is created.
+export function isPreviewSafe(env){
+  return !(env?.CF_PAGES_BRANCH==='link-ventas-cloudflare' && env?.LINK_SELLER_DESK_LIVE_ACCESS==='true');
+}
+export function previewHotels(){
+  return [
+    {id:'demo-hotel-fauna',name:'Hotel Fauna',slug:'hotel-fauna',lead_prefix:'FAU',active:true},
+    {id:'demo-hotel-casa-solcor',name:'Hotel Casa Solcor',slug:'hotel-casa-solcor',lead_prefix:'SOL',active:true}
+  ];
+}
+export async function previewAdminFrom(req,env){
+  const token=String(req.headers.authorization||'').replace(/^Bearer\\s+/i,'').trim();
+  if(!token)throw Object.assign(new Error('Inicia sesión en LINK Ventas para continuar.'),{status:401});
+  const url=env?.SUPABASE_URL||'https://lpirjwifzosdzgdncsbt.supabase.co';
+  const key=env?.SUPABASE_PUBLISHABLE_KEY||env?.VITE_SUPABASE_PUBLISHABLE_KEY||'sb_publishable_ORe3lY3LRSZo0LMpz4EM9Q_Bf9aUejD';
+  const client=createClient(url,key,{global:{headers:{Authorization:'Bearer '+token}},auth:{autoRefreshToken:false,persistSession:false}});
+  const {data,error}=await client.auth.getUser(token);
+  if(error||!data.user)throw Object.assign(new Error('La sesión de LINK Ventas no es válida.'),{status:401});
+  const {data:profile,error:profileError}=await client.from('profiles').select('id,full_name,email,role,is_active').eq('id',data.user.id).maybeSingle();
+  if(profileError)throw Object.assign(new Error('No se pudo verificar el perfil con los permisos actuales.'),{status:403});
+  if(!profile?.is_active)throw Object.assign(new Error('La cuenta está desactivada.'),{status:403});
+  if(profile.role!=='admin')throw Object.assign(new Error('Este escritorio de prueba está reservado a una cuenta administradora.'),{status:403});
+  return {user:data.user,profile};
+}
 export function setupAdmin(env){
   const url=env?.SUPABASE_URL||'https://lpirjwifzosdzgdncsbt.supabase.co';
   const key=env?.SUPABASE_SERVICE_ROLE_KEY;
