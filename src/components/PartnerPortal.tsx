@@ -97,11 +97,24 @@ export default function PartnerPortal(){
     if(!robots){robots=document.createElement('meta');robots.name='robots';document.head.appendChild(robots)}
     const previous=robots.content;
     robots.content='noindex,nofollow,noarchive,nosnippet';
+    const onSessionHandoff=(event:MessageEvent)=>{
+      if(event.origin!==PREVIEW_PRODUCTION_ORIGIN||event.source!==window.opener||event.data?.type!=='LINK_VENTAS_PREVIEW_SESSION')return;
+      const token=String(event.data.access_token||'');
+      if(!token)return;
+      setHandoffWaiting(false);
+      void loadData(token).then(()=>setChecking(false)).catch(()=>setChecking(false));
+    };
+    window.addEventListener('message',onSessionHandoff);
     void (async()=>{
       try{
         const {data:{session}}=await supabase.auth.getSession();
         if(session){
           await loadData(session.access_token);
+        }else if(isPagesPreviewHost){
+          if(window.opener){
+            setHandoffWaiting(true);
+            window.opener.postMessage({type:'LINK_VENTAS_PREVIEW_READY'},PREVIEW_PRODUCTION_ORIGIN);
+          }
         }else{
           const response=await fetch('/api/partner-data?area=auth');
           if(response.ok){
@@ -109,12 +122,11 @@ export default function PartnerPortal(){
             if(body.authenticated)await loadData();
           }
         }
-      }catch(_error){
-        // An absent or expired session should leave a clean login screen.
-        setError('');
-      }finally{setChecking(false)}
+      }catch(_error){setError('');}
+      finally{setChecking(false)}
     })();
     return()=>{
+      window.removeEventListener('message',onSessionHandoff);
       document.title=previousTitle;
       if(created)robots?.remove();else if(robots)robots.content=previous;
     };
