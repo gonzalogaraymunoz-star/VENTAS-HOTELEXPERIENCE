@@ -41,7 +41,7 @@ export function previewHotels(){
   ];
 }
 export async function previewAdminFrom(req,env){
-  const token=String(req.headers.authorization||'').replace(/^Bearer\\s+/i,'').trim();
+  const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
   if(!token)throw Object.assign(new Error('Inicia sesión en LINK Ventas para continuar.'),{status:401});
   const url=env?.SUPABASE_URL||'https://lpirjwifzosdzgdncsbt.supabase.co';
   const key=env?.SUPABASE_PUBLISHABLE_KEY||env?.VITE_SUPABASE_PUBLISHABLE_KEY||'sb_publishable_ORe3lY3LRSZo0LMpz4EM9Q_Bf9aUejD';
