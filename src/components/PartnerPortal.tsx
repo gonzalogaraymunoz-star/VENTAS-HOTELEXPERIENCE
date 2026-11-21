@@ -41,7 +41,6 @@ type PortalData={
 };
 type SelectedService=PortalCatalogSelection&{key:string;date:string;notes:string};
 const PREVIEW_REQUESTS_KEY='link-ventas-seller-desk-preview-requests-v1';
-const PREVIEW_PRODUCTION_ORIGIN='https://link-ventas-hotel.pages.dev';
 const isPagesPreviewHost=window.location.hostname.endsWith('.link-ventas-hotel.pages.dev')&&window.location.hostname!=='link-ventas-hotel.pages.dev';
 function readPreviewLeads():PartnerLead[]{
   try{
@@ -66,13 +65,12 @@ export default function PartnerPortal(){
   const [selectedHotelId,setSelectedHotelId]=useState('');
   const [selectedServices,setSelectedServices]=useState<SelectedService[]>([]);
   const [notice,setNotice]=useState('');
-  const [handoffWaiting,setHandoffWaiting]=useState(false);
 
   async function loadData(token?:string){
     setLoading(true);setError('');
     try{
       const headers:Record<string,string>={};
-      if(token)headers.Authorization='Bearer '+token;
+      if(token&&!isPagesPreviewHost)headers.Authorization='Bearer '+token;
       const response=await fetch('/api/partner-data',{headers});
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||'No se pudo cargar el portal.');
@@ -81,7 +79,7 @@ export default function PartnerPortal(){
         return {...body,leads,summary:{total:leads.length,confirmed:0,pending:leads.length,quoted:0}};
       })():body;
       setData(next);setIdentity(next.identity);
-      if(token)setSellerToken(token);
+      if(token&&!isPagesPreviewHost)setSellerToken(token);
       return body as PortalData;
     }catch(e:any){
       setError(e.message||'No se pudo cargar el portal.');
@@ -97,36 +95,26 @@ export default function PartnerPortal(){
     if(!robots){robots=document.createElement('meta');robots.name='robots';document.head.appendChild(robots)}
     const previous=robots.content;
     robots.content='noindex,nofollow,noarchive,nosnippet';
-    const onSessionHandoff=(event:MessageEvent)=>{
-      if(event.origin!==PREVIEW_PRODUCTION_ORIGIN||event.source!==window.opener||event.data?.type!=='LINK_VENTAS_PREVIEW_SESSION')return;
-      const token=String(event.data.access_token||'');
-      if(!token)return;
-      setHandoffWaiting(false);
-      void loadData(token).then(()=>setChecking(false)).catch(()=>setChecking(false));
-    };
-    window.addEventListener('message',onSessionHandoff);
     void (async()=>{
       try{
-        const {data:{session}}=await supabase.auth.getSession();
-        if(session){
-          await loadData(session.access_token);
-        }else if(isPagesPreviewHost){
-          if(window.opener){
-            setHandoffWaiting(true);
-            window.opener.postMessage({type:'LINK_VENTAS_PREVIEW_READY'},PREVIEW_PRODUCTION_ORIGIN);
-          }
+        if(isPagesPreviewHost){
+          // Synthetic preview identity: never inspect, request or receive a real session.
+          await loadData();
         }else{
-          const response=await fetch('/api/partner-data?area=auth');
-          if(response.ok){
-            const body=await response.json();
-            if(body.authenticated)await loadData();
+          const {data:{session}}=await supabase.auth.getSession();
+          if(session)await loadData(session.access_token);
+          else{
+            const response=await fetch('/api/partner-data?area=auth');
+            if(response.ok){
+              const body=await response.json();
+              if(body.authenticated)await loadData();
+            }
           }
         }
-      }catch(_error){setError('');}
+      }catch(_error){setError('No se pudo preparar el entorno de prueba.');}
       finally{setChecking(false)}
     })();
     return()=>{
-      window.removeEventListener('message',onSessionHandoff);
       document.title=previousTitle;
       if(created)robots?.remove();else if(robots)robots.content=previous;
     };
@@ -140,6 +128,7 @@ export default function PartnerPortal(){
   async function login(event:React.FormEvent){
     event.preventDefault();setLoading(true);setError('');
     try{
+      if(isPagesPreviewHost){await loadData();return;}
       if(loginMode==='seller'){
         const {data:authData,error:authError}=await supabase.auth.signInWithPassword({email:sellerEmail.trim(),password:sellerPassword});
         if(authError)throw authError;
@@ -161,6 +150,12 @@ export default function PartnerPortal(){
   }
 
   async function logout(){
+    if(isPagesPreviewHost){
+      localStorage.removeItem(PREVIEW_REQUESTS_KEY);
+      setSelectedServices([]);setNotice('');setTab('catalog');
+      await loadData();
+      return;
+    }
     if(identity?.mode==='admin'){
       if(isPagesPreviewHost)window.location.href=PREVIEW_PRODUCTION_ORIGIN;
       else window.location.hash='';
@@ -203,23 +198,7 @@ export default function PartnerPortal(){
   if(checking)return <main className="partner-shell"><div className="partner-loading">Preparando Hotel Experience…</div></main>;
 
   if(!identity||!data){
-    if(isPagesPreviewHost)return <main className="partner-shell partner-login-page">
-      <section className="partner-login">
-        <div className="partner-login-copy">
-          <span className="partner-eyebrow">LINK VENTAS · PRUEBA SEGURA</span>
-          <h1>Usa tu sesión actual de administración.</h1>
-          <p>Esta dirección de vista previa no comparte el almacenamiento de sesión con LINK Ventas. Ábrela desde la aplicación principal con el botón «Probar escritorio seguro» para transferir una sesión temporal, sin volver a escribir tu contraseña.</p>
-          <div className="partner-security"><ShieldCheck size={18}/><span>No se envían tokens por URL ni se guardan en este navegador. La prueba solo consulta tu perfil bajo RLS; las solicitudes DEMO quedan locales.</span></div>
-        </div>
-        <div className="partner-login-card">
-          <div className="partner-login-icon"><ShieldCheck size={20}/></div>
-          <span className="partner-eyebrow">ACCESO CON SESIÓN EXISTENTE</span>
-          <h2>{handoffWaiting?'Esperando la sesión de LINK Ventas…':'Abre la prueba desde LINK Ventas'}</h2>
-          <p>{handoffWaiting?'La ventana está lista. Vuelve a LINK Ventas; la sesión se transferirá de forma directa y temporal.':'No introduzcas otra contraseña aquí. Primero entra a LINK Ventas como lo haces normalmente y usa «Probar escritorio seguro».'}</p>
-          <a className="partner-primary" href={PREVIEW_PRODUCTION_ORIGIN}>Abrir LINK Ventas</a>
-        </div>
-      </section>
-    </main>;
+    if(isPagesPreviewHost)return <main className="partner-shell partner-login-page"><section className="partner-login"><div className="partner-login-copy"><span className="partner-eyebrow">LINK VENTAS · DEMO AISLADA</span><h1>Identidad de demostración</h1><p>La vista previa no ha podido cargar sus datos sintéticos. No se ha utilizado ninguna sesión real ni se ha consultado información privada.</p></div><div className="partner-login-card"><div className="partner-login-icon"><ShieldCheck size={20}/></div><h2>Entorno DEMO</h2>{error&&<div className="partner-error">{error}</div>}<button type="button" onClick={()=>void loadData()} disabled={loading}>{loading?'Preparando…':'Reintentar demo'}</button><a className="partner-back-link" href="https://link-ventas-hotel.pages.dev">Volver a LINK Ventas</a></div></section></main>;
     return <main className="partner-shell partner-login-page">
       <section className="partner-login">
         <div className="partner-login-copy">
@@ -259,12 +238,12 @@ export default function PartnerPortal(){
       <div>
         <span className="partner-eyebrow">LINK VENTAS · ESCRITORIO COMERCIAL</span>
         <h1>{identity.mode==='seller'?'Escritorio del vendedor':identity.mode==='admin'?'Escritorio de administración':identity.name}</h1>
-        <p>{identity.mode==='seller'?'Vendedor · hoteles asignados':identity.mode==='admin'?'Administrador · sesión actual de LINK Ventas':('Punto de venta · '+(selectedHotel?.name||identity.name))}</p>
+        <p>{data.preview_safe?'ADMIN DEMO · identidad ficticia, sin acceso a cuentas reales':identity.mode==='seller'?'Vendedor · hoteles asignados':identity.mode==='admin'?'Administrador · sesión actual de LINK Ventas':('Punto de venta · '+(selectedHotel?.name||identity.name))}</p>
       </div>
       <div className="partner-top-actions">
         {data.preview_safe&&<button onClick={()=>{localStorage.removeItem(PREVIEW_REQUESTS_KEY);void loadData(sellerToken||undefined)}} disabled={loading}>Limpiar pruebas</button>}
-        <button onClick={()=>void loadData(sellerToken||undefined)} disabled={loading}><RefreshCw size={15}/> Actualizar</button>
-        <button onClick={()=>{if(isPagesPreviewHost)window.location.href=PREVIEW_PRODUCTION_ORIGIN;else window.location.hash='';}}>Volver a LINK Ventas</button><button onClick={()=>void logout()}><LogOut size={15}/> Salir</button>
+        <button onClick={()=>void loadData(isPagesPreviewHost?undefined:sellerToken||undefined)} disabled={loading}><RefreshCw size={15}/> Actualizar</button>
+        <button onClick={()=>{if(isPagesPreviewHost)window.location.href='https://link-ventas-hotel.pages.dev';else window.location.hash='';}}>Volver a LINK Ventas</button><button onClick={()=>void logout()}><LogOut size={15}/> {data.preview_safe?'Reiniciar demo':'Salir'}</button>
       </div>
     </header>
 
