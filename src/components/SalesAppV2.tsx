@@ -138,7 +138,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'new-sale' && <SalesFlowForm key={salesFormKey} profile={profile} hotels={data.hotels} products={data.products} suppliers={data.suppliers} sellers={data.sellers} leads={data.leads} services={data.services} initialLeadId={editLeadId} initialProductId={initialProductId} initialDeparture={initialDeparture||undefined} pendingContext={pendingResolution||undefined} operationsUrl={operationsUrl} onSaved={refresh} onCompleted={async () => { await refresh(); setPendingResolution(null);setEditLeadId(''); setInitialProductId('');setInitialDeparture(null); go('leads'); }}/>} 
           {screen === 'tours'&&<TourSalesBoard onAddReservation={departure=>newIntake(departure.product_catalog_id||'',departure)}/>} 
           {screen === 'catalog' && <EmbeddedCatalog/>} 
-          {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
+          {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} hotels={data.hotels} sellers={data.sellers} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
