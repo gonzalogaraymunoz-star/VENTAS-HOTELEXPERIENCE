@@ -1,2 +1,111 @@
 .lead-ficha-integral{max-width:1280px;margin:0 auto;color:#191917}.lead-ficha-integral h1{font-size:30px;margin:4px 0}.lead-ficha-integral h2{font-size:19px;margin:0 0 18px}.lead-ficha-integral h3{font-size:15px;margin:18px 0 10px}.lf-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:8px 0 20px}.lf-toolbar p{color:#6e6a62;font-size:13px}.lf-section{background:#fff;border:1px solid #e4e0d9;border-radius:16px;padding:22px;margin:0 0 16px;break-inside:avoid}.lf-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.lf-grid>div{display:grid;gap:5px;background:#f8f7f4;padding:12px;border-radius:9px}.lf-grid small,.lf-passengers dt,.lf-activity small{font-size:11px;color:#77736c}.lf-table-wrap{overflow-x:auto}.lf-table-wrap table{width:100%;border-collapse:collapse;font-size:12px}.lf-table-wrap th,.lf-table-wrap td{text-align:left;padding:10px;border-bottom:1px solid #e8e4de;vertical-align:top}.lf-note{font-size:12px;color:#746f66;background:#f8f7f4;padding:10px 12px;border-radius:8px}.lf-passengers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.lf-passengers article,.lf-operation{border:1px solid #e7e2da;border-radius:12px;padding:16px;break-inside:avoid}.lf-passengers dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.lf-passengers dl div{min-width:0}.lf-passengers dd{margin:3px 0 0;font-size:12px;overflow-wrap:anywhere}.lf-service{display:flex;justify-content:space-between;gap:18px;border-bottom:1px solid #e8e4de;padding:12px 0}.lf-service h3{margin:4px 0}.lf-service p{font-size:12px;color:#6e6a62}.lf-service>span{font-weight:700;white-space:nowrap}.lf-doc-list{list-style:none;padding:0;margin:0}.lf-doc-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #eee9e2}.lf-doc-list li div{display:grid;gap:4px}.lf-doc-list small,.lf-empty{font-size:11px;color:#77736c}.lf-doc-list a{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#263b32;font-weight:650}.lf-assignment,.lf-food{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 0;border-top:1px solid #eee9e2;font-size:12px}.lf-food{background:#f8f7f4;padding:10px;border-radius:8px;margin:8px 0}.lf-activity{display:grid;grid-template-columns:175px 1fr;gap:5px 14px;padding:12px 0;border-bottom:1px solid #eee9e2}.lf-activity time{grid-row:span 3;font-size:11px;color:#77736c}.lf-activity span{font-size:12px}.lf-footer{display:flex;gap:10px;padding:12px 0 28px}@media(max-width:800px){.lf-toolbar{flex-direction:column}.lf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lf-passengers{grid-template-columns:1fr}}@media(max-width:520px){.lf-grid{grid-template-columns:1fr}.lf-activity{grid-template-columns:1fr}.lf-activity time{grid-row:auto}.lf-doc-list li{align-items:flex-start;flex-direction:column}.lf-passengers dl{grid-template-columns:1fr}}@media print{@page{size:A4;margin:12mm}body{background:#fff!important}.app-shell,.workspace,.content-area{display:block!important;background:#fff!important;padding:0!important;margin:0!important}.lead-ficha-integral{max-width:none!important}.no-print,.sidebar,.topbar,.lf-footer{display:none!important}.lf-section{box-shadow:none;border:1px solid #bbb;break-inside:auto;margin-bottom:8px;padding:14px}.lf-passengers article,.lf-operation,.lf-service,.lf-activity{break-inside:avoid}.lf-doc-list a{color:#111;text-decoration:underline}.lead-ficha-integral h1{font-size:22px}}
 .lf-index-filters{display:flex;flex-wrap:wrap;align-items:end;gap:10px}.lf-index-filters label{display:grid;gap:5px;font-size:11px;color:#6e6a62;font-weight:650}.lf-index-filters input,.lf-index-filters select{height:40px;min-width:125px;border:1px solid #d5cec4;border-radius:8px;padding:7px 9px;background:#fff;color:#191917;font:inherit}.lf-index-filters .search-box{flex:1;min-width:220px}.lf-index-filters>span{font-size:12px;color:#6e6a62;padding:10px 0}@media(max-width:800px){.lf-index-filters label{flex:1;min-width:130px}.lf-index-filters .search-box{flex-basis:100%}}
+
+/* Mobile layout: keep filters compact and the integral-ficha header inside the viewport. */
+@media(max-width:520px){
+  .lf-index-filters{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    align-items:stretch;
+    gap:10px;
+    width:100%;
+    min-width:0;
+    padding:12px;
+  }
+  .lf-index-filters .search-box{
+    grid-column:1/-1;
+    display:flex;
+    flex:none;
+    width:100%;
+    min-width:0;
+    padding:0 4px;
+  }
+  .lf-index-filters label{
+    display:grid;
+    flex:none;
+    width:100%;
+    min-width:0;
+    gap:5px;
+  }
+  .lf-index-filters input,
+  .lf-index-filters select{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+  }
+  .lf-index-filters>span{
+    display:flex;
+    align-items:center;
+    min-width:0;
+    padding:6px 0;
+  }
+  .lf-index-filters>.button{
+    grid-column:1/-1;
+    width:100%;
+    min-width:0;
+  }
+  .lead-ficha-integral{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+  .lf-toolbar{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+    width:100%;
+    min-width:0;
+    padding:8px 0 18px;
+  }
+  .lf-toolbar>div:first-child{
+    width:100%;
+    min-width:0;
+  }
+  .lf-toolbar h1{
+    max-width:100%;
+    font-size:clamp(22px,7vw,28px);
+    line-height:1.08;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  .lf-toolbar p{
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+  .lf-toolbar .top-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:100%;
+    min-width:0;
+    gap:8px;
+  }
+  .lf-toolbar .top-actions .button{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    padding:10px 8px;
+    gap:6px;
+    white-space:normal;
+    text-align:center;
+    line-height:1.2;
+    font-size:12px;
+  }
+  .lf-toolbar .top-actions .button:last-child{
+    grid-column:1/-1;
+  }
+  .lf-section{
+    min-width:0;
+    padding:16px;
+  }
+  .lf-service{
+    min-width:0;
+    flex-wrap:wrap;
+  }
+  .lf-service>div{
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+}
