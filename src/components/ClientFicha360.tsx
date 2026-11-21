@@ -4,7 +4,6 @@ import { emptyIntakePassenger, emptyRequest, intakeMissing, intakePayload, optio
 import type { IntakePassenger, IntakeRequest } from '../lib/clientIntake360';
 import type { Lead, LeadService, HotelPartner, SellerProfile } from '../types';
 import './ClientFicha360.css';
-import LeadFichaIntegral from './LeadFichaIntegral';
 
 type IntakeLead = Lead & { intake_request?: Partial<IntakeRequest> | null };
 export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClose, onSaved }: { leadId?: string; canEdit: boolean; hotels: HotelPartner[]; sellers: SellerProfile[]; onClose: () => void; onSaved: () => Promise<void> }) {
