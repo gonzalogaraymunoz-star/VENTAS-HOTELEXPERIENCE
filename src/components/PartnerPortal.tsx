@@ -161,6 +161,10 @@ export default function PartnerPortal(){
   }
 
   async function logout(){
+    if(identity?.mode==='admin'){
+      window.location.hash='';
+      return;
+    }
     if(identity?.mode==='seller'){
       await supabase.auth.signOut();
     }else{
