@@ -1,6 +1,6 @@
 import {
   crmUserFrom,hashPassword,makeAccessCode,noStore,normalizePrefix,
-  publicAccount,randomPassword,setupAdmin
+  isPreviewSafe,previewAdminFrom,previewHotels,publicAccount,randomPassword,setupAdmin
 } from './partner-portal.js';
 
 const APPROVED_HOTELS = ['hotel-fauna','hotel-casa-solcor'];
@@ -16,6 +16,14 @@ async function approvedHotels(admin) {
 export default async function handler(req,res,env){
   noStore(res);
   try{
+    if(isPreviewSafe(env)){
+      await previewAdminFrom(req,env);
+      if(req.method==='GET')return res.status(200).json({
+        accounts:[],sellers:[],assignments:[],hotels:previewHotels(),preview_safe:true,
+        notice:'Vista previa segura: administración visible, sin crear ni modificar cuentas reales.'
+      });
+      return res.status(403).json({error:'La vista previa segura es de solo lectura. La creación y gestión de accesos está deshabilitada.'});
+    }
     const admin=setupAdmin(env);
     const {user,profile}=await crmUserFrom(req,admin);
     if(profile.role!=='admin')return res.status(403).json({error:'Solo administración principal puede gestionar accesos.'});
