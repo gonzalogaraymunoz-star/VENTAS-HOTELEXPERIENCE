@@ -74,14 +74,14 @@
     max-width:100%;
     overflow-wrap:anywhere;
   }
-  .lf-toolbar .top-actions{
+  .lead-ficha-integral .lf-toolbar-actions{
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));
     width:100%;
     min-width:0;
     gap:8px;
   }
-  .lf-toolbar .top-actions .button{
+  .lead-ficha-integral .lf-toolbar-actions .button{
     width:100%;
     min-width:0;
     max-width:100%;
@@ -92,7 +92,7 @@
     line-height:1.2;
     font-size:12px;
   }
-  .lf-toolbar .top-actions .button:last-child{
+  .lead-ficha-integral .lf-toolbar-actions .button:last-child{
     grid-column:1/-1;
   }
   .lf-section{
@@ -107,5 +107,120 @@
     min-width:0;
     max-width:100%;
     overflow-wrap:anywhere;
+  }
+}
+
+
+/* Ficha 360: acciones propias, fuera de las reglas globales .top-actions del shell. */
+.lead-ficha-integral .lf-toolbar-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:8px;
+  min-width:0;
+}
+.lead-ficha-integral .lf-toolbar-actions .button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  width:auto;
+  min-width:0;
+  padding:10px 12px;
+  font-size:13px;
+  white-space:nowrap;
+}
+.lead-ficha-integral .lf-toolbar-actions .button.dark{
+  width:auto;
+  font-size:13px;
+  padding:10px 12px;
+}
+@media(max-width:520px){
+  .lead-ficha-integral .lf-toolbar-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:100%;
+    gap:8px;
+  }
+  .lead-ficha-integral .lf-toolbar-actions .button,
+  .lead-ficha-integral .lf-toolbar-actions .button.dark,
+  .lead-ficha-integral .lf-toolbar-actions .button.ghost{
+    display:inline-flex;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    height:auto;
+    min-height:42px;
+    padding:9px 7px;
+    font-size:12px;
+    line-height:1.2;
+    white-space:normal;
+    text-align:center;
+  }
+  .lead-ficha-integral .lf-toolbar-actions .button:nth-child(3){
+    grid-column:1/-1;
+  }
+
+  /* La tabla económica se convierte en fichas legibles, sin scroll lateral. */
+  .lead-ficha-integral .lf-pricing-table-wrap{
+    width:100%;
+    min-width:0;
+    overflow:visible;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap table{
+    display:block;
+    width:100%;
+    min-width:0;
+    border-collapse:separate;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap thead{
+    display:none;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap tbody{
+    display:grid;
+    gap:10px;
+    width:100%;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap tr{
+    display:grid;
+    width:100%;
+    min-width:0;
+    padding:7px 12px;
+    border:1px solid #e4e0d9;
+    border-radius:11px;
+    background:#fff;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap td{
+    display:grid;
+    grid-template-columns:minmax(105px,38%) minmax(0,1fr);
+    align-items:start;
+    gap:8px;
+    width:100%;
+    min-width:0;
+    padding:9px 0;
+    border-bottom:1px solid #eeeae4;
+    overflow-wrap:anywhere;
+    font-size:12px;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap td::before{
+    color:#77736c;
+    font-size:9px;
+    line-height:1.35;
+    font-weight:800;
+    letter-spacing:.045em;
+    text-transform:uppercase;
+  }
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(1)::before{content:"Servicio"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(2)::before{content:"Fecha"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(3)::before{content:"Modalidad"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(4)::before{content:"Pax"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(5)::before{content:"Precio unitario"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(6)::before{content:"Total pactado"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(7)::before{content:"Moneda"}
+  .lead-ficha-integral .lf-pricing-table-wrap td:nth-child(6){
+    font-weight:800;
+    color:#191917;
+    border-bottom:0;
   }
 }
