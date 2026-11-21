@@ -160,7 +160,7 @@ export default function LeadFichaIntegral({ leadId, sellers, onClose }: Props) {
       <div className="lf-grid">{intakeItems.map(([label, key]) => {
         const value = intakeRequest?.[key];
         const display = value === null || value === undefined || value === '' ? 'Pendiente' : key === 'agreedPrice' ? `${String(value)} ${intakeRequest?.currency || '· moneda pendiente'}` : key === 'pax' ? `${String(value)} pax` : String(value);
-        return <div key={key}><small>{label}</small><strong>{display}</strong></div>;
+        return <div key={key} className={key === 'product' || key === 'sourceNote' ? 'lf-intake-long' : undefined}><small>{label}</small><strong>{display}</strong></div>;
       })}</div>
       <p className="lf-note">Esta sección refleja únicamente la solicitud recibida. Los campos vacíos permanecen pendientes; no representan servicios confirmados ni datos inferidos.</p>
     </section>
