@@ -35,3 +35,9 @@
   .ficha360 h1,.ficha360 h2,.ficha360 h3{color:#181715!important;break-after:avoid}
   .ficha360 .ficha360-person{padding:3mm 0 4mm!important}
 }
+
+.ficha360-print-value{display:none}
+@media print{
+  .ficha360-grid input,.ficha360-grid select,.ficha360-grid textarea{display:none!important}
+  .ficha360-print-value{display:block!important;min-height:5mm;border-bottom:1px solid #c8c2b8;padding:0 0 1mm;color:#181715!important;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
+}
