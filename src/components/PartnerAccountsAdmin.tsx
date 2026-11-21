@@ -15,6 +15,7 @@ export default function PartnerAccountsAdmin(){
   const [hotels,setHotels]=useState<Hotel[]>([]);
   const [assignments,setAssignments]=useState<Assignment[]>([]);
   const [loading,setLoading]=useState(true);
+  const [previewSafe,setPreviewSafe]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [credential,setCredential]=useState<Credentials|null>(null);
@@ -38,6 +39,7 @@ export default function PartnerAccountsAdmin(){
     setLoading(true);setError('');
     try{
       const result=await request('GET');
+      setPreviewSafe(Boolean(result.preview_safe));
       setAccounts(result.accounts||[]);
       setSellers(result.sellers||[]);
       setHotels(result.hotels||[]);
@@ -120,6 +122,7 @@ export default function PartnerAccountsAdmin(){
       <button onClick={()=>setCredential(null)}>Listo</button>
     </section>}
 
+    {previewSafe&&<div className="partner-security partner-preview-banner"><ShieldCheck size={18}/><span><strong>VISTA PREVIA SEGURA · SOLO LECTURA</strong> Puedes revisar el panel y los hoteles de alcance, pero crear, activar, asignar o renovar accesos está bloqueado en este entorno.</span></div>}
     {error&&<div className="partner-error partner-page-error">{error}</div>}
 
     <section className="partner-admin-grid">
@@ -131,7 +134,7 @@ export default function PartnerAccountsAdmin(){
           <Field label="Notas internas" wide><textarea rows={3} value={posForm.notes} onChange={e=>setPosForm(x=>({...x,notes:e.target.value}))} placeholder="Identificación del puesto o responsable."/></Field>
         </div>
         <div className="partner-admin-note"><KeyRound size={15}/><span>Cada login queda vinculado a un solo hotel. Puedes crear varios puntos de venta para el mismo hotel; el código y la contraseña se generan una sola vez.</span></div>
-        <button className="partner-primary" disabled={busy||!posForm.hotelId||!posForm.name.trim()}>{busy?'Creando…':'Crear acceso de punto de venta'}</button>
+        <button className="partner-primary" disabled={previewSafe||busy||!posForm.hotelId||!posForm.name.trim()}>{busy?'Creando…':'Crear acceso de punto de venta'}</button>
       </form>
 
       <form className="partner-panel partner-create-account" onSubmit={createSeller}>
@@ -142,7 +145,7 @@ export default function PartnerAccountsAdmin(){
         </div>
         <div className="partner-access-hotels"><span className="partner-eyebrow">HOTELES ASIGNADOS *</span><div>{hotels.map(h=><label key={h.id}><input type="checkbox" checked={sellerForm.hotelIds.includes(h.id)} onChange={()=>toggleHotel(h.id)}/><span>{h.name}</span></label>)}</div></div>
         <div className="partner-admin-note"><KeyRound size={15}/><span>Se crea un usuario individual de Supabase Auth, sin enviar correo automático. La contraseña temporal se muestra una vez y el vendedor puede ingresar con correo y contraseña.</span></div>
-        <button className="partner-primary" disabled={busy||!sellerForm.name.trim()||!sellerForm.email.trim()||!sellerForm.hotelIds.length}>{busy?'Creando…':'Crear vendedor y asignar hoteles'}</button>
+        <button className="partner-primary" disabled={previewSafe||busy||!sellerForm.name.trim()||!sellerForm.email.trim()||!sellerForm.hotelIds.length}>{busy?'Creando…':'Crear vendedor y asignar hoteles'}</button>
       </form>
     </section>
 
@@ -153,8 +156,8 @@ export default function PartnerAccountsAdmin(){
           <div className="partner-account-icon"><Store size={17}/></div>
           <div className="partner-account-copy"><strong>{account.name}</strong><span>{account.access_code} · {account.lead_prefix}</span><small>{account.scope_value}{account.last_login_at?' · último acceso '+new Date(account.last_login_at).toLocaleString('es-CL'):' · nunca ha ingresado'}</small></div>
           <span className={account.active?'partner-account-state active':'partner-account-state'}>{account.active?'Activo':'Desactivado'}</span>
-          <button type="button" onClick={()=>void reset('pos',account)} disabled={busy} title="Renovar contraseña"><RotateCcw size={14}/></button>
-          <button type="button" onClick={()=>void toggle('pos',account)} disabled={busy}>{account.active?'Desactivar':'Activar'}</button>
+          <button type="button" onClick={()=>void reset('pos',account)} disabled={previewSafe||busy} title="Renovar contraseña"><RotateCcw size={14}/></button>
+          <button type="button" onClick={()=>void toggle('pos',account)} disabled={previewSafe||busy}>{account.active?'Desactivar':'Activar'}</button>
         </article>)}
         {!accounts.length&&<div className="partner-empty">Todavía no hay puntos de venta con login propio.</div>}
       </div>}
@@ -168,10 +171,10 @@ export default function PartnerAccountsAdmin(){
           <div><strong>{seller.full_name||seller.email||'Vendedor'}</strong><small>{seller.email||'Sin correo'} · {seller.is_active?'Activo':'Desactivado'}</small></div>
           {hotels.map(hotel=>{
             const checked=assignments.some(a=>a.seller_profile_id===seller.id&&a.hotel_partner_id===hotel.id);
-            return <label key={hotel.id}><input type="checkbox" checked={checked} disabled={busy||!seller.is_active} onChange={()=>void assign(seller.id,hotel.id,!checked)}/><span>{hotel.name}</span></label>;
+            return <label key={hotel.id}><input type="checkbox" checked={checked} disabled={previewSafe||busy||!seller.is_active} onChange={()=>void assign(seller.id,hotel.id,!checked)}/><span>{hotel.name}</span></label>;
           })}
-          <button type="button" onClick={()=>void reset('seller',seller)} disabled={busy||!seller.is_active} title="Renovar contraseña"><RotateCcw size={14}/></button>
-          <button type="button" onClick={()=>void toggle('seller',seller)} disabled={busy}>{seller.is_active?'Desactivar':'Activar'}</button>
+          <button type="button" onClick={()=>void reset('seller',seller)} disabled={previewSafe||busy||!seller.is_active} title="Renovar contraseña"><RotateCcw size={14}/></button>
+          <button type="button" onClick={()=>void toggle('seller',seller)} disabled={previewSafe||busy}>{seller.is_active?'Desactivar':'Activar'}</button>
         </article>)}
       </div>:<div className="partner-empty">Todavía no hay vendedores con login individual.</div>}
     </section>
