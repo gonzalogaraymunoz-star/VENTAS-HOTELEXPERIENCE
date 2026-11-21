@@ -26,7 +26,7 @@ function documentLabel(row: Row) { return text(pick(row, 'title', 'file_name', '
 function documentUrl(row: Row) {
   const direct = pick(row, 'url', 'external_url');
   if (direct) return String(direct);
-  const driveId = pick(row, 'drive_file_id', 'external_id');
+  const driveId = pick(row, 'drive_file_id');
   if (driveId && String(driveId).length > 10) return `https://drive.google.com/open?id=${encodeURIComponent(String(driveId))}`;
   return '';
 }
