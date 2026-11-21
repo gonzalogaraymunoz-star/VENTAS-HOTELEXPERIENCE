@@ -1,5 +1,5 @@
 /* Filtros del índice de Clientes: aislados del toolbar global del shell. */
-.lf-index-filters{
+.screen-stack > .lf-index-filters{
   display:grid;
   grid-template-columns:minmax(220px,1.7fr) repeat(5,minmax(105px,1fr)) auto auto;
   align-items:end;
@@ -11,7 +11,7 @@
   border:1px solid #dfdcd4;
   border-radius:12px;
 }
-.lf-index-filters .search-box{
+.screen-stack > .lf-index-filters .search-box{
   display:flex;
   align-items:center;
   gap:8px;
@@ -19,7 +19,7 @@
   min-width:0;
   padding:0 8px;
 }
-.lf-index-filters .search-box input{
+.screen-stack > .lf-index-filters .search-box input{
   width:100%;
   min-width:0;
   height:40px;
@@ -27,7 +27,7 @@
   box-shadow:none!important;
   background:transparent;
 }
-.lf-index-filters label{
+.screen-stack > .lf-index-filters label{
   display:grid;
   gap:5px;
   min-width:0;
@@ -35,8 +35,8 @@
   color:#6e6a62;
   font-weight:650;
 }
-.lf-index-filters input,
-.lf-index-filters select{
+.screen-stack > .lf-index-filters input,
+.screen-stack > .lf-index-filters select{
   display:block;
   width:100%;
   min-width:0;
@@ -49,39 +49,39 @@
   color:#191917;
   font:inherit;
 }
-.lf-index-filters>span{
+.screen-stack > .lf-index-filters>span{
   align-self:center;
   white-space:nowrap;
   font-size:12px;
   color:#6e6a62;
   padding:6px 0;
 }
-.lf-index-filters>.button{
+.screen-stack > .lf-index-filters>.button{
   min-width:0;
   white-space:nowrap;
 }
 @media(max-width:1100px){
-  .lf-index-filters{
+  .screen-stack > .lf-index-filters{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
-  .lf-index-filters .search-box,
-  .lf-index-filters>span,
-  .lf-index-filters>.button{
+  .screen-stack > .lf-index-filters .search-box,
+  .screen-stack > .lf-index-filters>span,
+  .screen-stack > .lf-index-filters>.button{
     grid-column:1/-1;
   }
 }
 @media(max-width:520px){
-  .lf-index-filters{
+  .screen-stack > .lf-index-filters{
     grid-template-columns:repeat(2,minmax(0,1fr));
     gap:10px;
     padding:12px;
   }
-  .lf-index-filters .search-box,
-  .lf-index-filters>span,
-  .lf-index-filters>.button{
+  .screen-stack > .lf-index-filters .search-box,
+  .screen-stack > .lf-index-filters>span,
+  .screen-stack > .lf-index-filters>.button{
     grid-column:1/-1;
   }
-  .lf-index-filters label{
+  .screen-stack > .lf-index-filters label{
     width:100%;
   }
   .lf-index-table-shell{
