@@ -276,7 +276,7 @@ export default function PartnerPortal(){
   </main>;
 }
 
-function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,sellerToken}:{
+function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,sellerToken,previewSafe}:{
   hotel:HotelOption|undefined;
   services:SelectedService[];
   onUpdate:(key:string,patch:Partial<SelectedService>)=>void;
