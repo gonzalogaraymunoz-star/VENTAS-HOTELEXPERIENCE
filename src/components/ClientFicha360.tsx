@@ -72,11 +72,18 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
   }
   function field(title: string, key: keyof IntakeRequest, type = 'text') {
     const value = request[key];
-    return <label key={key}>{title}<input type={type} value={value ?? ''} disabled={locked} placeholder="Pendiente" min={type === 'number' ? 0 : undefined} onChange={event => {
-      const raw = event.target.value;
+    const onChange = (raw: string) => {
       if (key === 'agreedPrice' && raw !== '' && (!Number.isFinite(Number(raw)) || Number(raw) < 0)) return;
       setRequest(current => ({ ...current, [key]: key === 'agreedPrice' ? optionalAmount(raw) : key === 'pax' ? (raw === '' ? null : Number(raw)) : raw }));
-    }}/></label>;
+    };
+    const longText = key === 'product' || key === 'sourceNote';
+    return <label key={key} className={longText ? 'ficha360-long-field' : undefined}>{title}{longText
+      ? <textarea rows={1} value={value ?? ''} disabled={locked} placeholder="Pendiente" onChange={event => onChange(event.target.value)} onInput={event => {
+          const element = event.currentTarget;
+          element.style.height = 'auto';
+          element.style.height = `${element.scrollHeight}px`;
+        }}/>
+      : <input type={type} value={value ?? ''} disabled={locked} placeholder="Pendiente" min={type === 'number' ? 0 : undefined} onChange={event => onChange(event.target.value)}/>}</label>;
   }
   return <div className="ficha360 screen-stack">
     <header className="page-heading"><div><p className="eyebrow">CLIENTES · FICHA 360</p><h1>{lead ? (lead.codigo && lead.codigo.length <= 14 ? lead.codigo : (people.map(person => person.full_name?.trim()).filter(Boolean).join(' \u00b7 ') || contact.trim() || 'Ficha nueva')) : (leadId ? 'Cargando ficha' : 'Nueva ficha parcial')}</h1>{lead?.codigo && lead.codigo.length > 14 ? <p className="ficha360-ref">Referencia {lead.codigo}</p> : null}<p>Datos de cliente y pasajeros. Guardar no confirma servicios ni entrega una reserva a Operaciones.</p></div><button className="button ghost" onClick={onClose}>Volver a Clientes</button></header>
