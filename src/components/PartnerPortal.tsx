@@ -264,7 +264,7 @@ export default function PartnerPortal(){
       <div className="partner-top-actions">
         {data.preview_safe&&<button onClick={()=>{localStorage.removeItem(PREVIEW_REQUESTS_KEY);void loadData(sellerToken||undefined)}} disabled={loading}>Limpiar pruebas</button>}
         <button onClick={()=>void loadData(sellerToken||undefined)} disabled={loading}><RefreshCw size={15}/> Actualizar</button>
-        <button onClick={()=>{window.location.hash='';}}>Volver a LINK Ventas</button><button onClick={()=>void logout()}><LogOut size={15}/> Salir</button>
+        <button onClick={()=>{if(isPagesPreviewHost)window.location.href=PREVIEW_PRODUCTION_ORIGIN;else window.location.hash='';}}>Volver a LINK Ventas</button><button onClick={()=>void logout()}><LogOut size={15}/> Salir</button>
       </div>
     </header>
 
