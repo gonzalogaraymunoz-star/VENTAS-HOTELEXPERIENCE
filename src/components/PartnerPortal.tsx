@@ -157,8 +157,7 @@ export default function PartnerPortal(){
       return;
     }
     if(identity?.mode==='admin'){
-      if(isPagesPreviewHost)window.location.href=PREVIEW_PRODUCTION_ORIGIN;
-      else window.location.hash='';
+      window.location.hash='';
       return;
     }
     if(identity?.mode==='seller'){
