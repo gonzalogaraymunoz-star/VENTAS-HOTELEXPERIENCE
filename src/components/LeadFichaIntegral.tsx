@@ -131,6 +131,19 @@ export default function LeadFichaIntegral({ leadId, sellers, onClose }: Props) {
     return { segments, links };
   };
   const print = () => window.print();
+  const intakeRequest = (lead as any).intake_request as Row | null;
+  const intakeItems: Array<[string, string]> = [
+    ['Servicio', 'product'],
+    ['Modalidad', 'modality'],
+    ['Cantidad de pasajeros', 'pax'],
+    ['Fecha del servicio', 'date'],
+    ['Hora', 'time'],
+    ['Recogida', 'pickup'],
+    ['Idioma', 'language'],
+    ['Tarifa acordada', 'agreedPrice'],
+    ['Moneda', 'currency'],
+    ['Fuente y relación con la solicitud', 'sourceNote'],
+  ];
 
   if (loading) return <div className="lead-ficha-integral"><p>Cargando ficha consolidada…</p></div>;
   if (error || !lead) return <div className="lead-ficha-integral"><div className="error-box">{error || 'No se encontró la solicitud.'}</div><button className="button ghost" onClick={onClose}>Volver</button></div>;
@@ -141,6 +154,15 @@ export default function LeadFichaIntegral({ leadId, sellers, onClose }: Props) {
       <h2>01 · Adquisición</h2><div className="lf-grid"><div><small>Contacto</small><strong>{text(lead.contacto)}</strong></div><div><small>Hotel / canal</small><strong>{text((lead as any).hotel_partners?.name || lead.canal)}</strong></div><div><small>Vendedor</small><strong>{text(seller?.full_name || seller?.email || sortedServices.find(service => service.seller_name)?.seller_name, lead.assigned_to ? 'Vendedor asignado (identidad no disponible)' : 'Vendedor pendiente')}</strong></div><div><small>Fecha de solicitud</small><strong>{dateTime(lead.created_at)}</strong></div><div><small>Estado comercial</small><strong>{text(lead.estado)}</strong></div></div>
       <h3>Precios pactados por servicio</h3><div className="lf-table-wrap lf-pricing-table-wrap"><table><thead><tr><th>Servicio</th><th>Fecha</th><th>Modalidad</th><th>Pax</th><th>Precio unitario</th><th>Total pactado</th><th>Moneda</th></tr></thead><tbody>{sortedServices.map(service => <tr key={service.id}><td>{service.producto}</td><td>{text(service.fecha_servicio)}</td><td>{text(service.modality)}</td><td>{text(service.numero_pax, '—')}</td><td>{money(service.precio_unitario ?? service.precio_venta, service.moneda)}</td><td>{money(service.precio_total ?? service.precio_venta, service.moneda)}</td><td>{text(service.moneda)}</td></tr>)}</tbody></table>{!sortedServices.length && <p>No hay servicios registrados en este expediente.</p>}</div>
       <p className="lf-note">Los importes se leen directamente de lead_services. No se recalculan desde TV1.2 ni desde los datos de solicitud recibida.</p>
+    </section>
+    <section className="lf-section">
+      <h2>Solicitud recibida, todavía no confirmada</h2>
+      <div className="lf-grid">{intakeItems.map(([label, key]) => {
+        const value = intakeRequest?.[key];
+        const display = value === null || value === undefined || value === '' ? 'Pendiente' : key === 'agreedPrice' ? `${String(value)} ${intakeRequest?.currency || '· moneda pendiente'}` : key === 'pax' ? `${String(value)} pax` : String(value);
+        return <div key={key}><small>{label}</small><strong>{display}</strong></div>;
+      })}</div>
+      <p className="lf-note">Esta sección refleja únicamente la solicitud recibida. Los campos vacíos permanecen pendientes; no representan servicios confirmados ni datos inferidos.</p>
     </section>
     <section className="lf-section"><h2>02 · Pasajeros</h2>{!passengers.some(person => person.is_primary === true) && <p className="lf-note">No hay un titular designado explícitamente en los datos actuales. Se muestran todos los pasajeros sin inferir quién realizó la adquisición.</p>}<div className="lf-passengers">{passengers.map((person, index) => <article key={person.id || index}><h3>{person.is_primary ? 'Titular / pasajero principal' : passengers.some(row => row.is_primary === true) ? `Acompañante ${index + 1}` : `Pasajero ${index + 1}`}</h3><strong>{text(person.full_name)}</strong><dl>{[['Código',person.passenger_code],['Documento', [person.document_type, person.document_number].filter(Boolean).join(' ')],['Nacimiento',person.birth_date],['Nacionalidad',person.nationality],['Alimentación',person.dietary_restrictions],['Necesidades',person.medical_notes],['Accesibilidad',person.disability_type],['Email',person.email],['Teléfono',person.phone]].map(([label,value]) => <div key={String(label)}><dt>{label}</dt><dd>{text(value)}</dd></div>)}</dl><h4>Hoja de riesgo</h4><DocumentLinks rows={passengerDocs(String(person.id))} urls={signedUrls}/></article>)}{!passengers.length && <p>Pasajeros pendientes de registro.</p>}</div></section>
     <section className="lf-section"><h2>03 · Itinerario adquirido</h2>{sortedServices.map(service => <article className="lf-service" key={service.id}><div><strong>{text(service.fecha_servicio)} · {text(service.hora_inicio, 'Hora pendiente')}</strong><h3>{service.producto}</h3><p>{text(service.modality)} · {text(service.numero_pax, '—')} pax · Detalle: {text(service.observacion)}</p><small>Pasajeros: {passengersForService(service.id).join(', ') || 'Vínculo individual no registrado'}</small></div><span>{money(service.precio_total ?? service.precio_venta, service.moneda)}</span></article>)}{!sortedServices.length && <p>Itinerario no registrado.</p>}</section>
