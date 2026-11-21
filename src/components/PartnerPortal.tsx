@@ -7,7 +7,7 @@ import './PartnerPortal.css';
 
 type HotelOption={id:string;name:string;slug:string};
 type Identity={
-  mode:'hotel'|'seller';
+  mode:'hotel'|'seller'|'admin';
   name:string;
   email?:string;
   access_code?:string;
@@ -36,8 +36,19 @@ type PortalData={
   catalogExtras:CatalogProduct[];
   summary:{total:number;confirmed:number;pending:number;quoted:number};
   leads:PartnerLead[];
+  preview_safe?:boolean;
+  preview_notice?:string;
 };
 type SelectedService=PortalCatalogSelection&{key:string;date:string;notes:string};
+const PREVIEW_REQUESTS_KEY='link-ventas-seller-desk-preview-requests-v1';
+const PREVIEW_PRODUCTION_ORIGIN='https://link-ventas-hotel.pages.dev';
+const isPagesPreviewHost=window.location.hostname.endsWith('.link-ventas-hotel.pages.dev')&&window.location.hostname!=='link-ventas-hotel.pages.dev';
+function readPreviewLeads():PartnerLead[]{
+  try{
+    const value=JSON.parse(localStorage.getItem(PREVIEW_REQUESTS_KEY)||'[]');
+    return Array.isArray(value)?value:[];
+  }catch{return [];}
+}
 
 export default function PartnerPortal(){
   const [identity,setIdentity]=useState<Identity|null>(null);
@@ -55,6 +66,7 @@ export default function PartnerPortal(){
   const [selectedHotelId,setSelectedHotelId]=useState('');
   const [selectedServices,setSelectedServices]=useState<SelectedService[]>([]);
   const [notice,setNotice]=useState('');
+  const [handoffWaiting,setHandoffWaiting]=useState(false);
 
   async function loadData(token?:string){
     setLoading(true);setError('');
@@ -64,7 +76,11 @@ export default function PartnerPortal(){
       const response=await fetch('/api/partner-data',{headers});
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||'No se pudo cargar el portal.');
-      setData(body);setIdentity(body.identity);
+      const next:PortalData=body.preview_safe?(()=>{
+        const leads=readPreviewLeads();
+        return {...body,leads,summary:{total:leads.length,confirmed:0,pending:leads.length,quoted:0}};
+      })():body;
+      setData(next);setIdentity(next.identity);
       if(token)setSellerToken(token);
       return body as PortalData;
     }catch(e:any){
