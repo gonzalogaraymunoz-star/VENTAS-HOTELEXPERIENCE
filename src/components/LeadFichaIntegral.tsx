@@ -115,9 +115,9 @@ export default function LeadFichaIntegral({ leadId, sellers, onClose }: Props) {
   const passengersForService = (serviceId: string) => servicePassengerLinks.filter(row => row.lead_service_id === serviceId).map(row => passengers.find(person => person.id === row.passenger_id)?.full_name).filter(Boolean);
   const supplierName = (id: unknown) => suppliers.find(row => row.id === id)?.name || 'Proveedor pendiente';
   const vehicleName = (id: unknown, manual?: unknown) => { const row = vehicles.find(item => item.id === id); return text([pick(row || {}, 'label'), [row?.brand, row?.model].filter(Boolean).join(' '), pick(row || {}, 'plate'), manual].filter(Boolean).join(' · '), id ? String(id) : 'Sin vehículo asignado'); };
-  const personName = (id: unknown) => {
+  const personName = (id: unknown, manual?: unknown) => {
     const row = servicePeople.find(item => item.id === id);
-    return text(pick(row || {}, 'full_name', 'name', 'display_name'), 'Sin asignar');
+    return text(pick(row || {}, 'full_name', 'name', 'display_name') || manual, 'Sin asignar');
   };
   const allDocs = [...documents, ...versions, ...operationalDocuments];
   const quoteDocs = allDocs.filter(row => /quote|cotiz/i.test(`${row.document_type || ''} ${row.title || ''}`));
