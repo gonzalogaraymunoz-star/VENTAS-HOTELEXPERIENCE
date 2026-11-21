@@ -1,0 +1,200 @@
+.partner-shell{min-height:100vh;background:#f3f0e9;color:#171717;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-sizing:border-box}
+.partner-shell *{box-sizing:border-box}
+.partner-eyebrow{font-size:8px;letter-spacing:.11em;font-weight:900;color:#736c63}
+.partner-login-page{display:grid;place-items:center;padding:32px}
+.partner-login{width:min(1120px,100%);display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:70px;align-items:center}
+.partner-login-copy h1{font-size:52px;letter-spacing:-.055em;line-height:1.02;margin:12px 0 18px;max-width:640px}
+.partner-login-copy>p{font-size:14px;line-height:1.6;color:#6b645c;max-width:560px}
+.partner-security{margin-top:24px;display:flex;gap:8px;align-items:flex-start;max-width:520px;border-top:1px solid #d8d1c7;padding-top:13px;font-size:9px;color:#706960}
+.partner-login-card,.partner-panel{background:#fff;border:1px solid #d8d1c7;border-radius:22px}
+.partner-login-card{padding:29px}
+.partner-login-icon{width:42px;height:42px;border:1px solid #d8d1c7;border-radius:50%;display:grid;place-items:center;margin-bottom:22px}
+.partner-login-card h2{font-size:26px;letter-spacing:-.04em;margin:6px 0 17px}
+.partner-login-card label,.partner-field{display:grid;gap:5px}
+.partner-login-card label{margin-top:10px}
+.partner-login-card label span,.partner-field>span{font-size:7px;text-transform:uppercase;letter-spacing:.08em;font-weight:850;color:#736c63}
+.partner-login-card input,.partner-field input,.partner-field select,.partner-field textarea{width:100%;border:1px solid #d8d1c7;border-radius:11px;background:#fff;padding:10px 11px;font:inherit;font-size:10px;outline:none}
+.partner-login-card input:focus,.partner-field input:focus,.partner-field select:focus,.partner-field textarea:focus{border-color:#171717}
+.partner-login-card>button,.partner-primary,.partner-submit-row button{border:0;background:#171717;color:#fff;border-radius:999px;padding:11px 14px;font:inherit;font-size:9px;font-weight:850;display:inline-flex;align-items:center;gap:6px;justify-content:center;cursor:pointer}
+.partner-login-card>button{width:100%;margin-top:14px}
+.partner-login-card>button:disabled,.partner-primary:disabled,.partner-submit-row button:disabled{opacity:.45;cursor:not-allowed}
+.partner-login-card>small{display:block;margin-top:11px;font-size:7px;line-height:1.5;color:#898279}
+.partner-error{border:1px solid #e1b9b2;background:#fff4f2;color:#8b4036;border-radius:10px;padding:9px 10px;font-size:9px;margin-top:10px}
+.partner-page-error{max-width:1120px;margin:12px auto}
+.partner-success{border:1px solid #bcd6c3;background:#f3faf5;color:#2c6845;border-radius:10px;padding:9px 10px;font-size:9px;display:flex;gap:7px;align-items:center}
+.partner-loading{min-height:100vh;display:grid;place-items:center;font-size:11px;color:#746d64}
+
+.partner-dashboard{padding-bottom:45px}
+.partner-topbar{background:#171717;color:#fff;padding:25px max(22px,calc((100vw - 1120px)/2));display:flex;justify-content:space-between;gap:18px;align-items:center}
+.partner-topbar .partner-eyebrow{color:#bbb5ad}
+.partner-topbar h1{font-size:30px;letter-spacing:-.045em;margin:4px 0 2px}
+.partner-topbar p{margin:0;color:#c5bfb7;font-size:9px}
+.partner-top-actions{display:flex;gap:7px}
+.partner-top-actions button,.partner-tabs button,.partner-refresh,.partner-account-list article>button,.partner-products-head button{border:1px solid #d7d0c5;background:#fff;border-radius:999px;padding:8px 10px;font:inherit;font-size:8px;font-weight:850;display:flex;align-items:center;gap:5px;cursor:pointer}
+.partner-top-actions button{background:transparent;color:#fff;border-color:#4c4945}
+.partner-tabs{max-width:1120px;margin:14px auto 0;display:flex;gap:7px}
+.partner-tabs button.active{background:#171717;color:#fff;border-color:#171717}
+.partner-content{max-width:1120px;margin:10px auto 0;display:grid;gap:12px}
+.partner-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid #d8d1c7;border-radius:17px;overflow:hidden;background:#fff}
+.partner-kpis>div{padding:12px 14px;border-right:1px solid #e9e3da}
+.partner-kpis>div:last-child{border-right:0}
+.partner-kpis small{display:block;font-size:7px;text-transform:uppercase;letter-spacing:.07em;color:#746d64}
+.partner-kpis strong{font-size:22px}
+.partner-panel{padding:16px}
+.partner-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:13px}
+.partner-panel-head h2{font-size:18px;letter-spacing:-.035em;margin:3px 0 0}
+.partner-panel-head>small{font-size:8px;color:#746d64}
+.partner-reservations{display:grid;gap:8px}
+.partner-reservation{border:1px solid #e1dbd2;border-radius:15px;overflow:hidden}
+.partner-reservation-head{padding:12px 13px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:#fcfaf6}
+.partner-reservation-head>div>span{font-size:7px;letter-spacing:.07em;font-weight:850;color:#746d64}
+.partner-reservation-head h3{font-size:13px;margin:2px 0}
+.partner-reservation-head p{font-size:8px;color:#746d64;margin:0}
+.partner-stage{font-size:7px;text-transform:uppercase;letter-spacing:.06em;border:1px solid #d9d2c8;border-radius:999px;padding:5px 7px}
+.partner-stage.confirmed{background:#f2f8f4;color:#2b6745;border-color:#bfd6c7}
+.partner-stage.quoted{background:#f3f6fb;color:#435f83;border-color:#c8d4e5}
+.partner-stage.pending{background:#fff9ee;color:#8c6420;border-color:#e6d2a5}
+.partner-stage.closed{background:#f4f4f4;color:#777}
+.partner-service-list{padding:5px 13px}
+.partner-service-list>div{display:grid;grid-template-columns:1fr auto;gap:12px;padding:8px 0;border-bottom:1px solid #eee8df}
+.partner-service-list>div:last-child{border-bottom:0}
+.partner-service-list span b{display:block;font-size:9px}
+.partner-service-list span small{display:block;font-size:7px;color:#746d64;margin-top:2px}
+.partner-service-list>div>span:last-child{text-align:right}
+.partner-service-list em{font-style:normal;font-size:8px;font-weight:800}
+.partner-muted,.partner-empty{font-size:9px;color:#746d64}
+.partner-empty{padding:18px;text-align:center}
+
+.partner-request-form{display:grid;gap:15px}
+.partner-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.partner-field.wide{grid-column:1/-1}
+.partner-field textarea{resize:vertical}
+.partner-products-head{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #ece6de;padding-top:14px}
+.partner-products-head h3{font-size:13px;margin:2px 0 0}
+.partner-products{display:grid;gap:8px}
+.partner-products article{position:relative;border:1px solid #e1dbd2;border-radius:14px;padding:12px 12px 10px 44px}
+.partner-product-number{position:absolute;left:12px;top:13px;width:24px;height:24px;border:1px solid #d8d1c7;border-radius:50%;display:grid;place-items:center;font-size:7px;font-weight:850}
+.partner-remove-product{margin-top:8px;border:0;background:transparent;color:#8b4036;font:inherit;font-size:8px;font-weight:800;display:flex;gap:5px;align-items:center;cursor:pointer}
+.partner-submit-row{display:flex;justify-content:flex-end}
+
+.partner-admin-page{padding:30px}
+.partner-admin-head{max-width:1180px;margin:0 auto 16px;display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+.partner-admin-head h1{font-size:32px;letter-spacing:-.045em;margin:5px 0}
+.partner-admin-head p{font-size:10px;color:#716a61;margin:0}
+.partner-admin-head>div:last-child{display:flex;gap:7px}
+.partner-admin-head a{border:1px solid #d3ccc2;background:#fff;color:#171717;text-decoration:none;border-radius:999px;padding:9px 11px;font-size:8px;font-weight:850}
+.partner-admin-head a.dark{background:#171717;color:#fff;border-color:#171717}
+.partner-admin-grid{max-width:1180px;margin:auto;display:grid;grid-template-columns:390px minmax(0,1fr);gap:12px;align-items:start}
+.partner-create-account{display:grid;gap:12px}
+.partner-admin-note{display:flex;gap:7px;align-items:flex-start;font-size:8px;color:#746d64;line-height:1.45}
+.partner-credential{max-width:1180px;margin:0 auto 12px;background:#171717;color:#fff;border-radius:17px;padding:12px 14px;display:grid;grid-template-columns:minmax(190px,1fr) 230px 230px auto;gap:10px;align-items:center}
+.partner-credential>div:first-child{display:flex;gap:8px;align-items:center}
+.partner-credential>div:first-child small{display:block;font-size:6px;letter-spacing:.08em;color:#bbb4ac}
+.partner-credential>div:first-child strong{display:block;font-size:10px;margin-top:2px}
+.partner-credential-value{border:1px solid #4a4743;border-radius:10px;padding:8px 9px;display:grid;grid-template-columns:1fr auto;align-items:center}
+.partner-credential-value small{grid-column:1/-1;font-size:6px;color:#aaa39b}
+.partner-credential-value strong{font-size:10px;word-break:break-all}
+.partner-credential-value button,.partner-credential>button{border:1px solid #4d4a46;background:transparent;color:#fff;border-radius:8px;padding:6px;cursor:pointer}
+.partner-credential>button{font-size:8px;font-weight:800}
+.partner-account-list{display:grid;gap:6px}
+.partner-account-list article{border:1px solid #e1dbd2;border-radius:13px;padding:9px;display:grid;grid-template-columns:32px minmax(0,1fr) auto auto auto;gap:8px;align-items:center}
+.partner-account-icon{width:32px;height:32px;border:1px solid #d8d1c7;border-radius:50%;display:grid;place-items:center}
+.partner-account-copy strong{display:block;font-size:9px}
+.partner-account-copy span,.partner-account-copy small{display:block;font-size:7px;color:#746d64;margin-top:2px}
+.partner-account-state{font-size:7px;font-weight:850;border-radius:999px;padding:5px 7px;background:#f3f3f3;color:#777}
+.partner-account-state.active{background:#eff8f2;color:#2c6845}
+.partner-refresh{padding:7px}
+.partner-account-list article>button{padding:7px 8px}
+
+@media(max-width:900px){
+  .partner-login{grid-template-columns:1fr;gap:30px}
+  .partner-login-copy h1{font-size:40px}
+  .partner-topbar,.partner-admin-head{flex-direction:column;align-items:stretch}
+  .partner-tabs,.partner-content{margin-left:16px;margin-right:16px}
+  .partner-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .partner-admin-grid{grid-template-columns:1fr}
+  .partner-credential{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .partner-login-page,.partner-admin-page{padding:18px}
+  .partner-login-copy h1{font-size:34px}
+  .partner-form-grid{grid-template-columns:1fr}
+  .partner-field.wide{grid-column:1}
+  .partner-kpis{grid-template-columns:1fr}
+  .partner-service-list>div{grid-template-columns:1fr}
+  .partner-service-list>div>span:last-child{text-align:left}
+  .partner-account-list article{grid-template-columns:32px 1fr auto}
+  .partner-account-state{grid-column:3}
+  .partner-account-list article>button{grid-row:2;grid-column:auto}
+}
+
+
+.partner-login-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 13px}
+.partner-login-modes button{border:1px solid #d8d1c7;background:#fff;color:#514b44;border-radius:999px;padding:8px 10px;font:inherit;font-size:8px;font-weight:850;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.partner-login-modes button.active{background:#171717;color:#fff;border-color:#171717}
+.partner-login-card>button{display:flex;align-items:center;justify-content:center}
+.partner-toolbar{max-width:1120px;margin:14px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;border:1px solid #d8d1c7;border-radius:15px;background:#fff;padding:10px 13px}
+.partner-hotel-select{display:grid;gap:4px;min-width:230px}
+.partner-hotel-select>span{font-size:7px;letter-spacing:.09em;font-weight:900;color:#736c63}
+.partner-hotel-select select{border:0;background:transparent;color:#171717;font:inherit;font-size:12px;font-weight:850;outline:none;padding:2px 0}
+.partner-hotel-select select:disabled{opacity:1;appearance:none}
+.partner-toolbar-note{display:flex;align-items:center;gap:7px;font-size:8px;color:#746d64}
+.partner-page-success{max-width:1120px;margin:12px auto 0}
+.partner-catalog-workspace{max-width:1120px;margin:10px auto 0;display:grid;gap:10px}
+.partner-catalog-workspace .pricing-v6{min-width:0}
+.partner-catalog-workspace .catalog-hero{border-radius:18px}
+.partner-catalog-workspace .pricing-workspace{min-height:560px}
+.partner-catalog-footer{position:sticky;bottom:12px;z-index:5;background:#171717;color:#fff;border-radius:14px;padding:11px 13px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 26px #17171722}
+.partner-catalog-footer>span{font-size:9px;font-weight:800}
+.partner-primary{background:#c8ff3d;color:#171717}
+.partner-section-label{border-top:1px solid #ece6de;padding-top:13px;font-size:8px;letter-spacing:.1em;font-weight:900;color:#746d64}
+.partner-selected-services{display:grid;gap:8px}
+.partner-selected-services article{position:relative;border:1px solid #e1dbd2;border-radius:14px;padding:12px 12px 10px 44px;display:grid;gap:9px}
+.partner-selected-service-copy{display:grid;gap:3px}
+.partner-selected-service-copy strong{font-size:11px}
+.partner-selected-service-copy small{font-size:8px;color:#746d64}
+.partner-selected-service-copy span{font-size:9px;font-weight:850;color:#171717}
+.partner-selected-services .partner-form-grid{margin-top:2px}
+.partner-request-disclaimer{margin:0;font-size:8px;line-height:1.5;color:#746d64;border-top:1px solid #ece6de;padding-top:12px}
+.partner-page-error{margin-top:12px}
+.partner-request-form .partner-products-head{margin-top:2px}
+.partner-catalog-workspace .pricing-hero .pricing-meta{background:#fbfaf7}
+.partner-catalog-workspace .modality-price-card footer{font-size:7px}
+.partner-catalog-workspace .modality-price-card>.primary-button{width:100%;margin-top:9px}
+.partner-catalog-workspace .extra-product-card>.primary-button{width:100%;margin-top:10px}
+.partner-catalog-workspace .internal-reference{display:none}
+
+@media(max-width:900px){
+  .partner-toolbar,.partner-catalog-workspace,.partner-page-success{margin-left:16px;margin-right:16px}
+  .partner-toolbar{align-items:flex-start;flex-direction:column}
+  .partner-catalog-workspace .pricing-workspace{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .partner-hotel-select{width:100%}
+  .partner-catalog-footer{bottom:8px;align-items:flex-start;flex-direction:column}
+  .partner-catalog-footer button{width:100%}
+  .partner-catalog-workspace .pricing-workspace{display:block}
+}
+
+.partner-seller-admin{max-width:1180px;margin:14px auto 0}
+.partner-seller-admin>.partner-admin-note{margin:0 0 12px}
+.partner-seller-list{display:grid;gap:8px}
+.partner-seller-row{display:grid;grid-template-columns:minmax(180px,1fr) repeat(2,minmax(170px,auto));gap:12px;align-items:center;border:1px solid #e1dbd2;border-radius:13px;padding:11px}
+.partner-seller-row>div strong,.partner-seller-row>div small{display:block}
+.partner-seller-row>div strong{font-size:10px}
+.partner-seller-row>div small{font-size:8px;color:#746d64;margin-top:3px}
+.partner-seller-row>label{display:flex;align-items:center;gap:7px;font-size:8px;font-weight:800;color:#4c4741}
+.partner-seller-row input{accent-color:#171717;width:15px;height:15px}
+@media(max-width:900px){.partner-seller-admin{margin-left:16px;margin-right:16px}.partner-seller-row{grid-template-columns:1fr 1fr}.partner-seller-row>div{grid-column:1/-1}}
+@media(max-width:600px){.partner-seller-row{grid-template-columns:1fr}.partner-seller-row>div{grid-column:1}}
+
+.partner-catalog-workspace .modality-conditions{display:grid;gap:3px;border-top:1px solid #ece6de;margin-top:8px;padding-top:7px}
+.partner-catalog-workspace .modality-conditions small{font-size:7px;line-height:1.4;color:#746d64}
+.partner-catalog-workspace .modality-price-card{min-height:0}
+
+.partner-back-link{display:block;margin-top:13px;text-align:center;color:#71695f;font-size:9px;font-weight:800;text-decoration:underline;text-underline-offset:3px}.partner-top-actions button:hover,.partner-tabs button:hover{opacity:.82}
+
+.partner-access-hotels{display:grid;gap:8px;margin:14px 0}.partner-access-hotels>span{font-size:8px;letter-spacing:.1em;font-weight:900;color:#736c63}.partner-access-hotels>div{display:flex;flex-wrap:wrap;gap:8px}.partner-access-hotels label{display:flex;align-items:center;gap:6px;border:1px solid #d8d1c7;border-radius:999px;padding:8px 10px;font-size:9px;font-weight:750}.partner-access-hotels input{accent-color:#171717}.partner-admin-head button{border:1px solid #d8d1c7;background:#fff;border-radius:999px;padding:9px 12px;font:inherit;font-size:9px;font-weight:850;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+
+.partner-preview-banner{margin:16px 0;padding:14px 16px;border:1px solid #d8d1c7;border-radius:12px;background:#f7f5f0;color:#49443d;font-size:12px;line-height:1.55}
+.partner-preview-banner strong{display:block;margin-bottom:3px;font-size:10px;letter-spacing:.08em}

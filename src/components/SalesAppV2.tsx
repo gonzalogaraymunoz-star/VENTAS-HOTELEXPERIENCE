@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Banknote, BookOpen, Boxes, ExternalLink, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Route, ShoppingBag, Users, X, Kanban, Store, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadLeads, loadPayments, loadReferenceData, loadServices } from '../lib/sales';
 import type { HotelPartner, Lead, LeadService, PaymentMovement, Product, Profile, SellerProfile, SellableTourDeparture, Supplier } from '../types';
@@ -10,8 +10,9 @@ import { AccountWorkspace } from './ClientPaymentsWorkspace';
 import { ReservationClientsWorkspace, ReservationDashboard, ReservationPipeline } from './ReservationWorkspaces';
 import TourSalesBoard from './TourSalesBoard';
 import ClientFicha360 from './ClientFicha360';
+const PartnerAccountsAdmin = lazy(() => import('./PartnerAccountsAdmin'));
 
-type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments';
+type Screen = 'ficha360' | 'dashboard' | 'new-sale' | 'tours' | 'leads' | 'pipeline' | 'catalog' | 'products' | 'payments' | 'seller-desk' | 'access-admin' | 'preview-desk';
 
 type PendingResolution={taskKey:string;title:string;detail:string;step:number;destination:string};
 
@@ -96,11 +97,29 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
     { id: 'new-sale', label: 'Cotización e ingreso', icon: ShoppingBag },
     { id: 'tours', label: 'Tours / Operaciones', icon: Route },
     { id: 'catalog', label: 'Catálogo', icon: BookOpen },
+    { id: 'seller-desk', label: 'Escritorio vendedor', icon: Store },
+    ...(profile.role === 'admin' ? [{ id: 'access-admin' as Screen, label: 'Accesos', icon: ShieldCheck }, { id: 'preview-desk' as Screen, label: 'Probar escritorio seguro', icon: ShieldCheck }] : []),
     { id: 'leads', label: 'Clientes', icon: Users },
     { id: 'pipeline', label: 'Pipeline', icon: Kanban },
     { id: 'products', label: 'Productos', icon: Boxes },
     { id: 'payments', label: 'Cobros', icon: Banknote },
   ];
+
+  async function openSafePreview(){
+    const previewOrigin='https://feature-seller-desk-tv12-pag.link-ventas-hotel.pages.dev';
+    let previewWindow:Window|null=null;
+    const onReady=(event:MessageEvent)=>{
+      if(event.origin!==previewOrigin||event.source!==previewWindow||event.data?.type!=='LINK_VENTAS_PREVIEW_READY')return;
+      void supabase.auth.getSession().then(({data})=>{
+        if(!data.session){previewWindow?.close();setError('No se encontró una sesión activa de LINK Ventas.');return;}
+        previewWindow?.postMessage({type:'LINK_VENTAS_PREVIEW_SESSION',access_token:data.session.access_token},previewOrigin);
+        window.removeEventListener('message',onReady);
+      });
+    };
+    window.addEventListener('message',onReady);
+    previewWindow=window.open(previewOrigin+'/#/escritorio','_blank');
+    if(!previewWindow){window.removeEventListener('message',onReady);setError('El navegador bloqueó la ventana de prueba. Permite ventanas emergentes para LINK Ventas.');}
+  }
 
   function go(next: Screen) { setScreen(next); setMobileOpen(false); }
   function newIntake(productId = '',departure:SellableTourDeparture|null=null) { setPendingResolution(null);setEditLeadId(''); setInitialProductId(productId);setInitialDeparture(departure); go('new-sale'); }
@@ -114,7 +133,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-head"><div className="brand-mark inverse">LINK</div><button className="icon-button sidebar-close" onClick={() => setMobileOpen(false)}><X size={19}/></button></div>
       <div className="product-name"><strong>Ventas</strong><span>HOTEL EXPERIENCE</span></div>
-      <nav>{nav.map(item => <button key={item.id} className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => item.id === 'new-sale' ? newIntake() : go(item.id)}><item.icon size={18}/><span>{item.label}</span></button>)}</nav>
+      <nav>{nav.map(item => <button key={item.id} className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => { if(item.id==='new-sale') newIntake(); else if(item.id==='seller-desk'){ window.location.hash='#/escritorio'; setMobileOpen(false); } else if(item.id==='preview-desk'){ setMobileOpen(false); void openSafePreview(); } else go(item.id); }}><item.icon size={18}/><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-spacer"/>
       {operationsUrl && <a className="nav-item" href={operationsUrl} target="_blank" rel="noreferrer"><ExternalLink size={18}/><span>Ir a Operaciones</span></a>}
       <button className="nav-item" onClick={() => supabase.auth.signOut()}><LogOut size={18}/><span>Cerrar sesión</span></button>
@@ -141,6 +160,7 @@ export default function SalesAppV2({ profile }: { profile: Profile }) {
           {screen === 'leads' && <ReservationClientsWorkspace leads={data.leads} services={data.services} onEditDraft={editIntake} onOpenFicha={openFicha} onUpdated={refresh}/>} 
           {screen === 'pipeline' && <ReservationPipeline leads={data.leads} onUpdated={refresh}/>} 
           {screen === 'products' && <ProductWorkspace products={data.products} onQuote={productId => newIntake(productId)}/>} 
+          {screen === 'access-admin' && profile.role === 'admin' && <Suspense fallback={<div className="loading-panel">Cargando permisos…</div>}><PartnerAccountsAdmin/></Suspense>}
           {screen === 'payments' && <AccountWorkspace leads={data.leads} payments={data.payments} services={confirmedServices} initialLeadId={paymentLeadId} operationsUrl={operationsUrl} onAdded={refresh}/>} 
         </>}
       </section>
@@ -159,5 +179,8 @@ function titleFor(screen: Screen) {
     pipeline: 'Pipeline comercial',
     products: 'Productos y tarifas',
     payments: 'Cobros y documentos',
+    'seller-desk': 'Escritorio vendedor',
+    'access-admin': 'Administración de accesos',
+    'preview-desk': 'Prueba segura del escritorio',
   } as Record<Screen, string>)[screen];
 }
