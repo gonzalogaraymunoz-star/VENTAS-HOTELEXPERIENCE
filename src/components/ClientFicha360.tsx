@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { emptyIntakePassenger, emptyRequest, intakeMissing, intakePayload, optionalAmount } from '../lib/clientIntake360';
 import type { IntakePassenger, IntakeRequest } from '../lib/clientIntake360';
@@ -26,6 +26,14 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loaded, setLoaded] = useState(!leadId);
+  const intakeFieldsRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const fields = intakeFieldsRef.current?.querySelectorAll<HTMLTextAreaElement>('.ficha360-long-field textarea');
+    fields?.forEach(element => {
+      element.style.height = 'auto';
+      element.style.height = `${element.scrollHeight}px`;
+    });
+  }, [loaded, request.product, request.sourceNote]);
   useEffect(() => {
     let active = true;
     if (!leadId) return;
@@ -97,7 +105,7 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       <section className="ficha360-pending"><h2>{missing.length} datos pendientes</h2><p>Se puede guardar una ficha incompleta. Pendiente no equivale a cero, Pasaporte o ausencia de necesidades.</p><ul>{missing.map(item => <li key={item}>{item}</li>)}</ul></section>
       <section className="work-panel"><h2>Expediente</h2><div className="ficha360-grid"><label>Contacto del cliente<input value={contact} onChange={event => setContact(event.target.value)} disabled={locked} placeholder="Pendiente, no usar el remitente como contacto"/></label><label>Hotel / origen<select value={hotelId} disabled={locked} onChange={event => setHotelId(event.target.value)}><option value="">Pendiente</option>{hotels.map(hotel => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label>Vendedor responsable<select value={sellerId} disabled={locked} onChange={event => setSellerId(event.target.value)}><option value="">Pendiente</option>{sellers.map(seller => <option key={seller.id} value={seller.id}>{seller.full_name || seller.email}</option>)}</select></label></div><p>Puedes completar origen y responsable aquí y guardar el mismo expediente. No se eligen automáticamente.</p></section>
       {linkedServices.length > 0 && <section className="work-panel"><h2>Servicios del mismo expediente</h2><p>Se conservan los servicios y sus UUID. Guardar esta ficha no los reconstruye ni cambia su estado.</p>{linkedServices.map(service => <article className="ficha360-person" key={service.id}><h3>{service.producto}</h3><p>{service.fecha_servicio || 'Fecha pendiente'} · {service.booking_status || 'Estado pendiente'} · {service.numero_pax ?? 'Cantidad pendiente'} pax</p></article>)}</section>}
-      <section className="work-panel"><h2>Solicitud recibida, todavía no confirmada</h2><div className="ficha360-grid">{field('Servicio', 'product')}{field('Modalidad', 'modality')}{field('Cantidad de pasajeros', 'pax', 'number')}{field('Fecha del servicio', 'date', 'date')}{field('Hora', 'time', 'time')}{field('Recogida', 'pickup')}{field('Idioma', 'language')}{field('Tarifa acordada', 'agreedPrice', 'number')}{field('Moneda informada', 'currency')}{field('Fuente y relación con la solicitud', 'sourceNote')}</div><p>Estos datos describen lo recibido. No crean servicios confirmados, cotizaciones ni cargos.</p></section>
+      <section className="work-panel"><h2>Solicitud recibida, todavía no confirmada</h2><div className="ficha360-grid" ref={intakeFieldsRef}>{field('Servicio', 'product')}{field('Modalidad', 'modality')}{field('Cantidad de pasajeros', 'pax', 'number')}{field('Fecha del servicio', 'date', 'date')}{field('Hora', 'time', 'time')}{field('Recogida', 'pickup')}{field('Idioma', 'language')}{field('Tarifa acordada', 'agreedPrice', 'number')}{field('Moneda informada', 'currency')}{field('Fuente y relación con la solicitud', 'sourceNote')}</div><p>Estos datos describen lo recibido. No crean servicios confirmados, cotizaciones ni cargos.</p></section>
       <section className="work-panel"><h2>Pasajeros</h2><p>No se escoge pasajero principal por el orden de ingreso. Escribe las declaraciones de alimentación y necesidades tal como fueron recibidas, o déjalas pendientes.</p>{people.map((person, index) => <article className="ficha360-person" key={person.id || index}><h3>Pasajero {index + 1}</h3><div className="ficha360-grid">{([
         ['full_name', 'Nombre completo', 'text'], ['email', 'Email', 'email'], ['phone', 'Teléfono', 'tel'], ['nationality', 'Nacionalidad', 'text'], ['document_type', 'Tipo de documento', 'text'], ['document_number', 'Número de documento', 'text'], ['birth_date', 'Fecha de nacimiento', 'date'], ['dietary_restrictions', 'Declaración de alimentación', 'text'], ['medical_notes', 'Declaración de necesidades especiales', 'text'], ['disability_type', 'Apoyos de accesibilidad', 'text'],
       ] as const).map(([key, title, type]) => <label key={key}>{title}<input type={type} value={person[key] || ''} placeholder="Pendiente" disabled={locked} onChange={event => patchPerson(index, key, event.target.value)}/></label>)}<label>Pasajero principal<select value={person.is_primary ? 'yes' : 'no'} disabled={locked} onChange={event => { if (event.target.value === 'yes') setPeople(current => current.map((row, rowIndex) => ({ ...row, is_primary: rowIndex === index }))); else patchPerson(index, 'is_primary', false); }}><option value="no">No designado</option><option value="yes">Designado explícitamente</option></select></label></div></article>)}<button className="button ghost" disabled={locked} onClick={() => setPeople(current => [...current, emptyIntakePassenger()])}>Agregar pasajero</button></section>
