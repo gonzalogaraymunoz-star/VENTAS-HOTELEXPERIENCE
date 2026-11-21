@@ -4,6 +4,7 @@ import { clp } from '../lib/money';
 import { updateLeadStatus } from '../lib/sales';
 import type { HotelPartner, Lead, LeadService, PaymentMovement, SellerProfile } from '../types';
 import ClientIntakeEditor from './ClientIntakeEditor';
+import './ReservationWorkspaces.css';
 
 const stageOptions = ['nuevo', 'contactado', 'interesado', 'cotizando', 'propuesta', 'esperando', 'perdido', 'cancelado', 'dormido'];
 const stageColumns = ['nuevo', 'contactado', 'interesado', 'cotizando', 'propuesta', 'esperando', 'confirmado', 'perdido', 'cancelado', 'dormido'];
@@ -87,7 +88,7 @@ export function ReservationClientsWorkspace({ leads, services, hotels, sellers, 
 
   return <div className="screen-stack">
     <section className="page-heading"><div><p className="eyebrow">CLIENTES</p><h1>Procesos comerciales y reservas</h1><p className="muted">Cada fila conserva la referencia, pax, productos y avance del mismo proceso. “Completar reserva” es el único handoff a Operaciones.</p></div></section>
-    <div className="toolbar lf-index-filters">
+    <div className="lf-index-filters">
       <div className="search-box"><Search size={17}/><input placeholder="Buscar código, referencia, cliente, producto, hotel…" value={query} onChange={event => setQuery(event.target.value)}/></div>
       <label>Desde<input type="date" value={fromDate} onChange={event => setFromDate(event.target.value)}/></label>
       <label>Hasta<input type="date" value={toDate} onChange={event => setToDate(event.target.value)}/></label>
@@ -96,7 +97,7 @@ export function ReservationClientsWorkspace({ leads, services, hotels, sellers, 
       <label>Vendedor<select value={sellerId} onChange={event => setSellerId(event.target.value)}><option value="">Todos</option>{sellers.map(seller => <option key={seller.id} value={seller.id}>{seller.full_name || seller.email}</option>)}</select></label>
       <span>{rows.length} solicitudes</span><button className="button dark" onClick={() => onOpenFicha()}>Nueva ficha parcial</button>
     </div>
-    <div className="table-shell"><table><thead><tr><th>Ingreso</th><th>Código / referencia</th><th>Origen</th><th>Contacto</th><th>Arribo</th><th>Flujo</th><th>Productos</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{rows.map(lead => {
+    <div className="table-shell lf-index-table-shell"><table><thead><tr><th>Ingreso</th><th>Código / referencia</th><th>Origen</th><th>Contacto</th><th>Arribo</th><th>Flujo</th><th>Productos</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{rows.map(lead => {
       const leadServices = servicesFor(lead.id);
       const confirmed = lead.estado === 'confirmado' || leadServices.some(service => ['confirmed', 'completed'].includes(String(service.booking_status)));
       return <tr key={lead.id}><td>{lead.created_at ? new Date(lead.created_at).toLocaleDateString('es-CL') : 'Sin fecha'}<small>{lead.created_at ? new Date(lead.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}</small></td><td><strong>{lead.codigo}</strong><small>{lead.reservation_reference || (confirmed ? 'Reserva confirmada' : 'Referencia pendiente')}</small></td><td>{lead.hotel_partners?.name || lead.canal || '—'}</td><td>{lead.contacto || 'Por completar'}<small>{lead.nationality || 'Nacionalidad pendiente'}</small></td><td>{lead.checkin || 'Por definir'}<small>{lead.stay_days != null ? `${lead.stay_days} días · ${lead.numero_pax || 1} pax` : `${lead.numero_pax || 1} pax`}</small></td><td><small>{flowLabel(confirmed ? 'completed' : lead.sales_stage)}</small></td><td>{leadServices.length}<small>{lead.servicio || 'Sin detalle'}</small></td><td>{clp(leadServices.reduce((sum, service) => sum + valueOf(service), 0))}</td><td><span className={`status status-${String(lead.estado || '').toLowerCase()}`}>{lead.estado}</span></td><td><div className="top-actions"><button className="button ghost" onClick={() => onOpenFicha(lead.id)}>Ficha 360</button>{confirmed ? <button className="button ghost" onClick={() => setEditingClient(lead)}>Datos</button> : <button className="button dark" onClick={() => onEditDraft(lead.id)}>Continuar proceso</button>}</div></td></tr>;
