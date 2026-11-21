@@ -1,6 +1,6 @@
 import {
   crmUserFrom,hashPassword,makeAccessCode,noStore,normalizePrefix,
-  isPreviewSafe,previewAdminFrom,previewHotels,publicAccount,randomPassword,setupAdmin
+  isPreviewSafe,previewHotels,publicAccount,randomPassword,setupAdmin
 } from './partner-portal.js';
 
 const APPROVED_HOTELS = ['hotel-fauna','hotel-casa-solcor'];
@@ -17,12 +17,11 @@ export default async function handler(req,res,env){
   noStore(res);
   try{
     if(isPreviewSafe(env)){
-      await previewAdminFrom(req,env);
       if(req.method==='GET')return res.status(200).json({
         accounts:[],sellers:[],assignments:[],hotels:previewHotels(),preview_safe:true,
-        notice:'Vista previa segura: administración visible, sin crear ni modificar cuentas reales.'
+        notice:'Administración DEMO: datos ficticios, sin consultar cuentas, perfiles ni asignaciones reales.'
       });
-      return res.status(403).json({error:'La vista previa segura es de solo lectura. La creación y gestión de accesos está deshabilitada.'});
+      return res.status(403).json({error:'La administración DEMO es de solo lectura. No se permiten escrituras ni cambios de accesos.'});
     }
     const admin=setupAdmin(env);
     const {user,profile}=await crmUserFrom(req,admin);
