@@ -190,7 +190,7 @@ export default function PartnerPortal(){
 
   async function requestCreated(code:string){
     setSelectedServices([]);
-    setNotice('Solicitud '+code+' recibida. Quedó pendiente de confirmación.');
+    setNotice(data?.preview_safe?'Solicitud DEMO '+code+' guardada localmente; no se envió a LINK Ventas ni a Supabase.':'Solicitud '+code+' recibida. Quedó pendiente de confirmación.');
     setTab('reservations');
     try{await loadData(sellerToken||undefined)}catch(_error){setError('La solicitud quedó registrada; actualiza para consultar su estado.');}
   }
@@ -253,15 +253,17 @@ export default function PartnerPortal(){
     <header className="partner-topbar">
       <div>
         <span className="partner-eyebrow">LINK VENTAS · ESCRITORIO COMERCIAL</span>
-        <h1>{identity.mode==='seller'?'Escritorio del vendedor':identity.name}</h1>
-        <p>{identity.mode==='seller'?'Vendedor · hoteles asignados':('Punto de venta · '+(selectedHotel?.name||identity.name))}</p>
+        <h1>{identity.mode==='seller'?'Escritorio del vendedor':identity.mode==='admin'?'Escritorio de administración':identity.name}</h1>
+        <p>{identity.mode==='seller'?'Vendedor · hoteles asignados':identity.mode==='admin'?'Administrador · sesión actual de LINK Ventas':('Punto de venta · '+(selectedHotel?.name||identity.name))}</p>
       </div>
       <div className="partner-top-actions">
+        {data.preview_safe&&<button onClick={()=>{localStorage.removeItem(PREVIEW_REQUESTS_KEY);void loadData(sellerToken||undefined)}} disabled={loading}>Limpiar pruebas</button>}
         <button onClick={()=>void loadData(sellerToken||undefined)} disabled={loading}><RefreshCw size={15}/> Actualizar</button>
         <button onClick={()=>{window.location.hash='';}}>Volver a LINK Ventas</button><button onClick={()=>void logout()}><LogOut size={15}/> Salir</button>
       </div>
     </header>
 
+    {data.preview_safe&&<div className="partner-security partner-preview-banner"><ShieldCheck size={18}/><span><strong>VISTA PREVIA SEGURA · DEMO</strong> {data.preview_notice} Las solicitudes de prueba solo se guardan en este navegador, sin pasajeros ni contactos personales y sin escribir en Supabase.</span></div>}
     <section className="partner-toolbar">
       <label className="partner-hotel-select">
         <span>HOTEL DE TRABAJO</span>
@@ -269,7 +271,7 @@ export default function PartnerPortal(){
           {data.hotels.map(hotel=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}
         </select>
       </label>
-      <div className="partner-toolbar-note"><ShieldCheck size={15}/><span>{identity.mode==='seller'?'Solo hoteles asignados a tu perfil.':'Acceso limitado a este hotel.'}</span></div>
+      <div className="partner-toolbar-note"><ShieldCheck size={15}/><span>{identity.mode==='seller'?'Solo hoteles asignados a tu perfil.':identity.mode==='admin'?'Alcance de prueba: Hotel Fauna y Hotel Casa Solcor.':'Acceso limitado a este hotel.'}</span></div>
     </section>
 
     <section className="partner-tabs">
@@ -297,6 +299,7 @@ export default function PartnerPortal(){
       onBackToCatalog={()=>setTab('catalog')}
       onCreated={requestCreated}
       sellerToken={sellerToken}
+      previewSafe={Boolean(data.preview_safe)}
     />}
 
     {tab==='reservations'&&<Reservations
@@ -307,7 +310,7 @@ export default function PartnerPortal(){
   </main>;
 }
 
-function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,sellerToken}:{
+function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,sellerToken,previewSafe}:{
   hotel:HotelOption|undefined;
   services:SelectedService[];
   onUpdate:(key:string,patch:Partial<SelectedService>)=>void;
@@ -315,6 +318,7 @@ function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,
   onBackToCatalog:()=>void;
   onCreated:(code:string)=>Promise<void>;
   sellerToken:string;
+  previewSafe:boolean;
 }){
   const [receptionist,setReceptionist]=useState({name:'',email:'',phone:''});
   const [passengerNames,setPassengerNames]=useState('');
@@ -334,6 +338,29 @@ function NewRequest({hotel,services,onUpdate,onRemove,onBackToCatalog,onCreated,
     }
     setSending(true);
     try{
+      if(previewSafe){
+        const code='DEMO-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+        const lead:PartnerLead={
+          id:'demo-'+code,codigo:code,
+          reserva:services.map(item=>item.product_name).join(' + '),
+          numero_pax:Math.max(names.length,...services.map(item=>item.pax)),
+          contacto:'Datos personales omitidos en modo demo',
+          empresa_ejecuta:hotel.name,
+          estado:'Solicitud DEMO · no enviada',
+          estado_raw:'nuevo',
+          created_at:new Date().toISOString(),
+          hotel_partner_id:hotel.id,
+          services:services.map((item,index)=>({
+            id:'demo-service-'+index,producto:item.product_name,fecha_servicio:item.date||null,
+            numero_pax:item.pax,estado:'Pendiente · DEMO',idioma:language,hotel_partner_id:hotel.id
+          }))
+        };
+        const current=readPreviewLeads();
+        localStorage.setItem(PREVIEW_REQUESTS_KEY,JSON.stringify([lead,...current].slice(0,50)));
+        setSuccess('Solicitud DEMO '+code+' guardada solo en este navegador. No se envió a LINK Ventas ni a Supabase.');
+        await onCreated(code);
+        return;
+      }
       const headers:Record<string,string>={'Content-Type':'application/json'};
       if(sellerToken)headers.Authorization='Bearer '+sellerToken;
       const response=await fetch('/api/partner-data',{
