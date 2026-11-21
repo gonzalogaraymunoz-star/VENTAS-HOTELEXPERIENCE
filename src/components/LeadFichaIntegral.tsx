@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, ExternalLink, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import './LeadFichaIntegral.css';
 import type { Lead, LeadService, SellerProfile } from '../types';
 
 type Row = Record<string, any>;
