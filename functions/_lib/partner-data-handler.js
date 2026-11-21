@@ -1,6 +1,6 @@
 import {
   crmUserFrom,destroyPartnerSession,getPartnerSession,issuePartnerSession,noStore,
-  publicAccount,setupAdmin,verifyPassword
+  isPreviewSafe,previewAdminFrom,previewHotels,publicAccount,setupAdmin,verifyPassword
 } from './partner-portal.js';
 import { resolveCatalogService,resolveTv12Service } from './tv12-pricing.js';
 
@@ -12,6 +12,16 @@ async function resolveIdentity(req,admin){
   const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
   if(token){
     const {user,profile}=await crmUserFrom(req,admin);
+    if(profile.role==='admin'){
+      const {data:hotels,error:hotelError}=await admin.from('hotel_partners')
+        .select('id,name,slug,active').eq('active',true).in('slug',['hotel-fauna','hotel-casa-solcor']).order('name');
+      if(hotelError)throw hotelError;
+      if(!hotels?.length)throw Object.assign(new Error('No hay hoteles autorizados activos para el escritorio.'),{status:403});
+      return {
+        mode:'admin',user,profile,account:null,hotels,hotelIds:hotels.map(h=>h.id),
+        identity:{mode:'admin',name:profile.full_name||user.email||'Administración',email:user.email||'',role:'admin',can_create_requests:true}
+      };
+    }
     if(profile.role!=='agent')throw Object.assign(new Error('Este acceso requiere un perfil vendedor activo.'),{status:403});
     const {data:assignments,error}=await admin.from('seller_partner_assignments')
       .select('hotel_partner_id').eq('seller_profile_id',user.id);
@@ -166,8 +176,20 @@ async function resolveRequestedServices(admin,input){
 export default async function handler(req,res,env){
   noStore(res);
   try{
-    const admin=setupAdmin(env);
     const area=String(req.query?.area||'').toLowerCase();
+    if(isPreviewSafe(env)){
+      if(area==='auth'&&req.method==='GET')return res.status(401).json({authenticated:false,preview_safe:true});
+      if(area==='auth')return res.status(403).json({error:'La vista previa segura no permite iniciar cuentas de recepción ni modificar sesiones.'});
+      const {user,profile}=await previewAdminFrom(req,env);
+      return res.status(200).json({
+        identity:{mode:'admin',name:profile.full_name||user.email||'Administración',email:user.email||'',role:'admin',can_create_requests:true},
+        hotels:previewHotels(),catalogExtras:[],
+        summary:{total:0,confirmed:0,pending:0,quoted:0},leads:[],
+        preview_safe:true,
+        preview_notice:'Entorno de prueba aislado. Los datos y solicitudes son demostrativos y no se conectan a registros comerciales.'
+      });
+    }
+    const admin=setupAdmin(env);
 
     if(area==='auth'){
       if(req.method==='GET'){
