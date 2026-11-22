@@ -12,3 +12,32 @@
 .ficha360-grid label.ficha360-long-field{min-width:0;align-content:start}
 .ficha360-grid label.ficha360-long-field textarea{width:100%;min-width:0;min-height:44px;height:auto;overflow:hidden;resize:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;line-height:1.5;border:1px solid #d5cec4;border-radius:9px;padding:9px 12px;background:white;color:#181715;font:inherit;box-sizing:border-box}
 .ficha360-grid label.ficha360-long-field textarea:disabled{background:#f4f2ee;color:#625c53}
+
+
+.ficha360-heading-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+@media print{
+  @page{size:A4;margin:12mm}
+  html,body{margin:0!important;background:#fff!important}
+  body *{visibility:hidden!important}
+  .ficha360,.ficha360 *{visibility:visible!important}
+  .ficha360{position:absolute!important;top:0!important;left:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;background:#fff!important;color:#181715!important;font-size:10pt!important}
+  .ficha360 .ficha360-heading-actions,.ficha360 .ficha360-actions,.ficha360 .ficha360-access,.ficha360 details,.ficha360 button{display:none!important}
+  .ficha360 .page-heading{display:block!important;margin:0 0 8mm!important}
+  .ficha360 .page-heading p{margin:2mm 0!important}
+  .ficha360 .work-panel,.ficha360-pending,.ficha360-person{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important;background:#fff!important}
+  .ficha360 .work-panel{border:1px solid #d8d3ca!important;margin:0 0 5mm!important;padding:5mm!important;border-radius:3mm!important}
+  .ficha360 .ficha360-pending{border:1px solid #d8d3ca!important;margin:0 0 5mm!important;padding:5mm!important}
+  .ficha360-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:3mm 5mm!important}
+  .ficha360-grid label{break-inside:avoid;font-size:9pt!important}
+  .ficha360-grid input,.ficha360-grid select,.ficha360-grid textarea{height:auto!important;min-height:0!important;padding:0!important;border:0!important;border-bottom:1px solid #c8c2b8!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;color:#181715!important;opacity:1!important;-webkit-text-fill-color:#181715!important;appearance:none!important;font:inherit!important}
+  .ficha360-grid textarea{white-space:pre-wrap!important;overflow:visible!important;resize:none!important}
+  .ficha360 p{color:#49443d!important}
+  .ficha360 h1,.ficha360 h2,.ficha360 h3{color:#181715!important;break-after:avoid}
+  .ficha360 .ficha360-person{padding:3mm 0 4mm!important}
+}
+
+.ficha360-print-value{display:none}
+@media print{
+  .ficha360-grid input,.ficha360-grid select,.ficha360-grid textarea{display:none!important}
+  .ficha360-print-value{display:block!important;min-height:5mm;border-bottom:1px solid #c8c2b8;padding:0 0 1mm;color:#181715!important;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
+}
