@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { emptyIntakePassenger, emptyRequest, intakeMissing, intakePayload, optionalAmount } from '../lib/clientIntake360';
+import { humanModality } from '../lib/salesFlow';
 import type { IntakePassenger, IntakeRequest } from '../lib/clientIntake360';
 import type { Lead, LeadService, HotelPartner, SellerProfile } from '../types';
 import './ClientFicha360.css';
@@ -71,7 +72,7 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
     const names = servicePaxLinks.filter(link => String(link.lead_service_id || '') === serviceId).map(link => people.find(person => String(person.id || '') === String(link.passenger_id || ''))?.full_name?.trim() || '').filter(Boolean);
     return names.length ? names.join(', ') : 'Vínculo individual no registrado';
   };
-  const itineraryLine = (service: LeadService) => `${printableValue(service.fecha_servicio)} · ${printableValue(service.hora_inicio)} · ${printableValue(service.producto)} · ${printableValue(service.modality)} · ${service.numero_pax ?? 'Pendiente'} pax`;
+  const itineraryLine = (service: LeadService) => `${printableValue(service.fecha_servicio)} · ${printableValue(service.hora_inicio)} · ${printableValue(service.producto)} · ${printableValue(service.modality ? humanModality(service.modality) : '')} · ${service.numero_pax ?? 'Pendiente'} pax`;
   const confirmed = lead?.estado === 'confirmado' || linkedServices.some(service => ['confirmed','completed'].includes(String(service.booking_status)));
   const locked = confirmed || !canEdit || !loaded || busy || loading;
   function patchPerson(index: number, key: keyof IntakePassenger, value: string | boolean) { setPeople(current => current.map((person, row) => row === index ? { ...person, [key]: value } : person)); }
