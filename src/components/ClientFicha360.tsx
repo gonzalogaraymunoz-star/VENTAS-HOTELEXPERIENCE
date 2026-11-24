@@ -6,6 +6,7 @@ import type { Lead, LeadService, HotelPartner, SellerProfile } from '../types';
 import './ClientFicha360.css';
 
 type IntakeLead = Lead & { intake_request?: Partial<IntakeRequest> | null };
+type ServicePaxLink = { lead_service_id?: string | null; passenger_id?: string | null };
 const printableValue = (value: unknown) => value === null || value === undefined || String(value).trim() === '' ? 'Pendiente' : String(value);
 export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClose, onSaved }: { leadId?: string; canEdit: boolean; hotels: HotelPartner[]; sellers: SellerProfile[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const [requestId] = useState(() => {
@@ -18,6 +19,7 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
   const [lead, setLead] = useState<IntakeLead | null>(null);
   const [people, setPeople] = useState<IntakePassenger[]>([]);
   const [linkedServices, setLinkedServices] = useState<LeadService[]>([]);
+  const [servicePaxLinks, setServicePaxLinks] = useState<ServicePaxLink[] | null>(null);
   const [request, setRequest] = useState<IntakeRequest>(emptyRequest);
   const [contact, setContact] = useState('');
   const [hotelId, setHotelId] = useState('');
@@ -43,7 +45,7 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       supabase.from('leads').select('*').eq('id', leadId).single(),
       supabase.from('passengers').select('*').eq('lead_id', leadId).order('passenger_code'),
       supabase.from('lead_services').select('*').eq('lead_id', leadId),
-    ]).then(([leadResult, passengerResult, serviceResult]) => {
+    ]).then(async ([leadResult, passengerResult, serviceResult]) => {
       if (!active) return;
       if (leadResult.error) throw leadResult.error;
       if (passengerResult.error) throw passengerResult.error;
@@ -53,11 +55,23 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       setLead(row); setContact(row.contacto || ''); setHotelId(row.hotel_partner_id || ''); setSellerId(row.assigned_to || '');
       setRequest({ ...emptyRequest(), ...Object.fromEntries(Object.entries(row.intake_request ?? {}).map(([key, value]) => [key, value ?? (key === 'pax' || key === 'agreedPrice' ? null : '')])) });
       setPeople((passengerResult.data || []).map(row => ({ ...emptyIntakePassenger(), ...Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value ?? ''])) })) as IntakePassenger[]);
+      const serviceIds = (serviceResult.data || []).map(row => String(row.id)).filter(Boolean);
+      if (serviceIds.length) {
+        const linksResult = await supabase.from('lead_service_passengers').select('lead_service_id, passenger_id').in('lead_service_id', serviceIds);
+        if (active) setServicePaxLinks(linksResult.error ? null : ((linksResult.data || []) as ServicePaxLink[]));
+      } else setServicePaxLinks([]);
       setLoaded(true);
     }).catch((problem: unknown) => { if (active) setError(problem instanceof Error ? problem.message : 'No se pudo leer la ficha. Comprueba tu acceso.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [leadId, reloadToken]);
   const missing = intakeMissing({ hotel_partner_id: hotelId || null, assigned_to: sellerId || null, contacto: contact }, people, request);
+  const sortedItinerary = linkedServices.slice().sort((a, b) => `${a.fecha_servicio || ''}|${a.hora_inicio || ''}`.localeCompare(`${b.fecha_servicio || ''}|${b.hora_inicio || ''}`));
+  const passengersForService = (serviceId: string) => {
+    if (servicePaxLinks === null) return 'Vínculos de pasajeros no disponibles en esta lectura';
+    const names = servicePaxLinks.filter(link => String(link.lead_service_id || '') === serviceId).map(link => people.find(person => String(person.id || '') === String(link.passenger_id || ''))?.full_name?.trim() || '').filter(Boolean);
+    return names.length ? names.join(', ') : 'Vínculo individual no registrado';
+  };
+  const itineraryLine = (service: LeadService) => `${printableValue(service.fecha_servicio)} · ${printableValue(service.hora_inicio)} · ${printableValue(service.producto)} · ${printableValue(service.modality)} · ${service.numero_pax ?? 'Pendiente'} pax`;
   const confirmed = lead?.estado === 'confirmado' || linkedServices.some(service => ['confirmed','completed'].includes(String(service.booking_status)));
   const locked = confirmed || !canEdit || !loaded || busy || loading;
   function patchPerson(index: number, key: keyof IntakePassenger, value: string | boolean) { setPeople(current => current.map((person, row) => row === index ? { ...person, [key]: value } : person)); }
@@ -110,8 +124,9 @@ export default function ClientFicha360({ leadId, canEdit, hotels, sellers, onClo
       <section className="work-panel"><h2>Pasajeros</h2><p>No se escoge pasajero principal por el orden de ingreso. Escribe las declaraciones de alimentación y necesidades tal como fueron recibidas, o déjalas pendientes.</p>{people.map((person, index) => <article className="ficha360-person" key={person.id || index}><h3>Pasajero {index + 1}</h3><div className="ficha360-grid">{([
         ['full_name', 'Nombre completo', 'text'], ['email', 'Email', 'email'], ['phone', 'Teléfono', 'tel'], ['nationality', 'Nacionalidad', 'text'], ['document_type', 'Tipo de documento', 'text'], ['document_number', 'Número de documento', 'text'], ['birth_date', 'Fecha de nacimiento', 'date'], ['dietary_restrictions', 'Declaración de alimentación', 'text'], ['medical_notes', 'Declaración de necesidades especiales', 'text'], ['disability_type', 'Apoyos de accesibilidad', 'text'],
       ] as const).map(([key, title, type]) => <label key={key}>{title}<input type={type} value={person[key] || ''} placeholder="Pendiente" disabled={locked} onChange={event => patchPerson(index, key, event.target.value)}/><span className="ficha360-print-value">{printableValue(person[key])}</span></label>)}<label>Pasajero principal<select value={person.is_primary ? 'yes' : 'no'} disabled={locked} onChange={event => { if (event.target.value === 'yes') setPeople(current => current.map((row, rowIndex) => ({ ...row, is_primary: rowIndex === index }))); else patchPerson(index, 'is_primary', false); }}><option value="no">Sin registro de designación</option><option value="yes">Registrado como principal</option></select><span className="ficha360-print-value">{person.is_primary ? 'Registrado como principal' : 'Sin registro de designación'}</span></label></div></article>)}<button className="button ghost" disabled={locked} onClick={() => setPeople(current => [...current, emptyIntakePassenger()])}>Agregar pasajero</button></section>
+      <section className="work-panel ficha360-itinerary"><h2>Itinerario del viaje</h2><p>Servicios registrados en este expediente, ordenados por fecha y hora. Este documento no incluye precios: la tarifa acordada solo se declara en la solicitud cuando existe respaldo.</p>{sortedItinerary.length > 0 ? sortedItinerary.map((service, index) => <article className="ficha360-service" key={service.id}><h3>{`Servicio ${index + 1} · ${itineraryLine(service)}`}</h3><dl>{([['Detalle', service.observacion], ['Pasajeros vinculados', passengersForService(service.id)]] as const).map(([label, value]) => <div key={String(label)}><dt>{label}</dt><dd>{printableValue(value)}</dd></div>)}</dl></article>) : <p>Itinerario no registrado. Los servicios se agregan desde el flujo de cotización existente.</p>}</section>
+      <section className="work-panel ficha360-risk"><h2>Hojas de riesgo</h2><p>Una hoja por pasajero, con las declaraciones tal como fueron recibidas y el itinerario completo del viaje. No reemplaza la hoja de riesgo operativa que emite Operaciones.</p>{people.length > 0 ? people.map((person, index) => <article className="ficha360-risk-sheet" key={person.id || index}><h3>Hoja de riesgo · {printableValue(person.full_name)}</h3><dl>{([['Documento', [person.document_type, person.document_number].filter(Boolean).join(' ')], ['Nacimiento', person.birth_date], ['Nacionalidad', person.nationality], ['Alimentación', person.dietary_restrictions], ['Necesidades especiales', person.medical_notes], ['Accesibilidad', person.disability_type]] as const).map(([label, value]) => <div key={String(label)}><dt>{label}</dt><dd>{printableValue(value)}</dd></div>)}</dl><h4>Itinerario completo</h4>{sortedItinerary.length > 0 ? <ol>{sortedItinerary.map(service => <li key={service.id}>{itineraryLine(service)}</li>)}</ol> : <p>Itinerario no registrado.</p>}</article>) : <p>Pasajeros pendientes de registro.</p>}</section>
       <footer className="ficha360-actions"><p>Sin confirmación de reserva. Los datos faltantes seguirán visibles.</p><button className="button dark" disabled={locked} onClick={() => void save()}>{busy ? 'Guardando…' : 'Guardar ficha parcial'}</button></footer>
     </>}
   </div>;
 }
-
