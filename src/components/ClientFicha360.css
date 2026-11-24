@@ -41,3 +41,25 @@
   .ficha360-grid input,.ficha360-grid select,.ficha360-grid textarea{display:none!important}
   .ficha360-print-value{display:block!important;min-height:5mm;border-bottom:1px solid #c8c2b8;padding:0 0 1mm;color:#181715!important;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
 }
+
+/* Itinerario del viaje y hojas de riesgo dentro de la ficha imprimible. */
+.ficha360-service{border-top:1px solid #ded8cf;padding:12px 0}
+.ficha360-service h3,.ficha360-risk-sheet h3{margin:0 0 8px;font-size:15px}
+.ficha360-service dl,.ficha360-risk-sheet dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;margin:0}
+.ficha360-service dl div,.ficha360-risk-sheet dl div{display:grid;gap:2px;min-width:0}
+.ficha360-service dt,.ficha360-risk-sheet dt{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#817a71;font-weight:700}
+.ficha360-service dd,.ficha360-risk-sheet dd{margin:0;font-size:13px;color:#3f3b35;overflow-wrap:anywhere}
+.ficha360-risk-sheet{border-top:1px solid #ded8cf;padding:16px 0 20px}
+.ficha360-risk-sheet h4{margin:14px 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#817a71}
+.ficha360-risk-sheet ol{margin:4px 0 0;padding-left:20px;display:grid;gap:4px;font-size:13px;color:#3f3b35}
+@media(max-width:800px){.ficha360-service dl,.ficha360-risk-sheet dl{grid-template-columns:minmax(0,1fr)}}
+@media print{
+  .ficha360-service{break-inside:avoid;page-break-inside:avoid;padding:3mm 0!important}
+  .ficha360-service h3,.ficha360-risk-sheet h3{font-size:10.5pt!important}
+  .ficha360-service dt,.ficha360-risk-sheet dt{font-size:7.5pt!important}
+  .ficha360-service dd,.ficha360-risk-sheet dd{font-size:9pt!important}
+  .ficha360-risk-sheet{break-before:page;page-break-before:always;border-top:0!important;padding:0 0 4mm!important}
+  .ficha360-risk-sheet:first-of-type{break-before:auto;page-break-before:auto}
+  .ficha360-risk-sheet ol{font-size:9pt!important}
+  .ficha360-risk-sheet h4{break-after:avoid}
+}
